@@ -1,6 +1,7 @@
 # ADR-0010: Use `hashicorp/vault/api` when the extension talks to Vault
 
-- **Status:** Accepted (not yet applied — no code depends on it)
+- **Status:** Accepted — applied on 2026-08-28 by
+  [ADR-0014](0014-vault-command.md); `internal/vault` now depends on the SDK.
 - **Date:** 2026-08-28
 - **Deciders:** @IanOliv
 

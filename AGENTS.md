@@ -40,9 +40,12 @@ cmd/                        Cobra command tree. One file per subcommand.
   whoami.go                 Example REST call through go-gh.
   repo.go                   Resolves the current repository like gh does.
   doctor.go                 GitHub identity + Vault-readiness diagnostics, text and JSON.
+  vault.go                  Vault resource queries: overview, token, mounts, can.
   version.go                Version reporting; overridden via -ldflags at release.
   helpers_test.go           fakeREST, testDeps and runRoot, shared by every test.
 internal/gh/client.go       Thin wrapper over go-gh; defines the RESTClient interface.
+internal/vault/client.go    Thin wrapper over hashicorp/vault/api; defines Client.
+  server_test.go            Drives the real SDK against an httptest stand-in Vault.
 script/build.sh             Cross-compiles release binaries into ./dist.
 docs/                       Project memory, decision log, and ADRs.
 .github/workflows/ci.yml    fmt + tidy + vet + race tests + cross-compile.
@@ -71,12 +74,20 @@ Go is pinned by `go.mod` (currently Go 1.25). If the local toolchain is older,
   directly.** Tests execute the command tree against a buffer.
 - **Wrap errors with context using `%w`**: `fmt.Errorf("fetching user: %w", err)`.
   Do not prefix messages with "error:" — the entrypoint adds the prefix.
+- **Do not call Vault or GitHub from tests.** For Vault, prefer the httptest
+  stand-in in `internal/vault/server_test.go` when the decoding layer is in
+  play — the `fakeVault` used by command tests bypasses every
+  `map[string]interface{}` assertion, which is where the bugs live.
 - **Do not call the GitHub API from tests.** Start from `testDeps()` and
   override only the fields the test needs, as `doctor_test.go` does. A command
   reaches the outside world only through the `Deps` struct it is constructed
   with — never through a package-level variable, and never through go-gh's
   concrete types. New capability means a new narrow interface in `internal/gh`
   plus a field on `Deps`.
+- **Never print a token.** `gh.CurrentAuth` and `vault.Token` carry the host,
+  the source and booleans, not secrets, so display code structurally cannot
+  leak one. `gh.Token()` is the single exception and exists for one caller: the
+  Vault GitHub login. Do not widen its use.
 - **Prefer go-gh over shelling out to `gh`.** Use `gh.NewRESTClient()` for REST
   and `repository.Current()` for repo resolution. Only use `gh.Exec` when a
   behaviour genuinely only exists in the `gh` binary.

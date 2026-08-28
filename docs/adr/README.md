@@ -35,7 +35,9 @@ invisible in the code.
 | [0007](0007-command-name-from-repo-name.md) | Accept `gh cli-extension` as the command name | Accepted |
 | [0008](0008-go-version-pinned-in-go-mod.md) | Pin the Go toolchain in `go.mod` and let `GOTOOLCHAIN` fetch it | Accepted |
 | [0009](0009-inject-dependencies.md) | Inject dependencies through a `Deps` struct | Accepted |
-| [0010](0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | Accepted (not yet applied) |
+| [0010](0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | Accepted (applied by 0014) |
 | [0011](0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | Accepted |
 | [0012](0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | Accepted |
 | [0013](0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | Accepted |
+| [0014](0014-vault-command.md) | `vault` reports the resources a token can reach | Accepted |
+| [0015](0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | Accepted |

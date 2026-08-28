@@ -16,10 +16,12 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0007](adr/0007-command-name-from-repo-name.md) | Accept `gh cli-extension` as the command name | 2026-08-28 | Accepted |
 | [0008](adr/0008-go-version-pinned-in-go-mod.md) | Pin the Go toolchain in `go.mod` and let `GOTOOLCHAIN` fetch it | 2026-08-28 | Accepted |
 | [0009](adr/0009-inject-dependencies.md) | Inject dependencies through a `Deps` struct | 2026-08-28 | Accepted |
-| [0010](adr/0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | 2026-08-28 | Accepted (not yet applied) |
+| [0010](adr/0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | 2026-08-28 | Accepted (applied by 0014) |
 | [0011](adr/0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | 2026-08-28 | Accepted |
 | [0012](adr/0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | 2026-08-28 | Accepted |
 | [0013](adr/0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | 2026-08-28 | Accepted |
+| [0014](adr/0014-vault-command.md) | `vault` reports the resources a token can reach | 2026-08-28 | Accepted |
+| [0015](adr/0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | 2026-08-28 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -90,6 +92,22 @@ initialised empty, so `jq '.identity.teams[]'` works on an account with no
 teams. Go serialises a nil slice as `null`, so this is one forgotten
 initialiser away from breaking; a test enforces it.
 
+**2026-08-28 — `internal/vault` is tested against a stand-in HTTP server, not
+only a fake client.** The command tests use a fake `vault.Client`, which
+bypasses every `map[string]interface{}` assertion in the decoding layer — the
+part most likely to break. `server_test.go` drives the real SDK against an
+httptest server so that decoding is actually exercised.
+
+**2026-08-28 — `gh.Token()` is the only place the GitHub secret is exposed.**
+It exists for one caller, the Vault login. Everything that prints uses
+`gh.CurrentAuth`, which carries the host, the source and a boolean and
+structurally cannot leak the token.
+
+**2026-08-28 — Errors carry no advice where the caller knows better.**
+`gh.Token()` returns "no GitHub token for github.com" and lets the Vault
+command say what to do about it, rather than both appending "run: gh auth
+login" and printing it twice.
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
@@ -115,7 +133,12 @@ questions above are settled.
 repository exists to explore the extension API — this is the obvious next
 thing to try.
 
-**Vault commands proper.** `doctor` stops at the GitHub boundary
-([ADR-0011](adr/0011-doctor-scope.md)). Probing a live Vault server and
-generating policies from team membership are the next commands, and the client
-choice is already settled ([ADR-0010](adr/0010-vault-official-sdk.md)).
+**Browsing and reading secrets.** `vault ls <path>` to walk a KV mount is the
+natural next command; reading a secret's *value* needs its own decision about
+putting sensitive material on a terminal
+([ADR-0014](adr/0014-vault-command.md)).
+
+**Generating Vault policies from GitHub team membership.** The original goal
+behind the extension, and the one part still unbuilt. `doctor` surfaces the
+teams and `vault` shows what a token resolves to; turning that into a policy is
+a write operation and needs its own design.

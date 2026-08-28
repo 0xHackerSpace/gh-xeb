@@ -26,7 +26,8 @@ single feature. There are no users to keep compatibility with yet.
 
 Scaffolding is complete and verified end to end:
 
-- Four working subcommands: `doctor`, `whoami`, `repo`, `version`.
+- Five working subcommands: `vault` (with `token`, `mounts`, `can`), `doctor`,
+  `whoami`, `repo`, `version`.
 - `doctor` is the first command written for the project's actual purpose:
   feeding GitHub identity attributes to HashiCorp Vault. It stops at the GitHub
   boundary on purpose — it reads `VAULT_ADDR` from the environment but never
@@ -47,21 +48,32 @@ Scaffolding is complete and verified end to end:
 - Nothing is committed. The whole scaffold is uncommitted in the working tree,
   on `main`, over the single `61c0a27 Initial commit`.
 
-## Where the Vault work is heading
+## Where the Vault work is heading (mostly arrived)
 
 The extension exists to surface GitHub identity attributes — user, orgs, teams,
 token scopes — for Vault, whose GitHub auth method maps org and team membership
 to policies. That single fact explains most of `doctor`'s design: `read:org` is
 checked because Vault needs it, and teams are listed because Vault maps them.
 
-Two things are already decided but not yet built:
+The `vault` command landed on 2026-08-28 and does talk to a live server, using
+the official `hashicorp/vault/api` SDK as ADR-0010 required. The dependency
+graph went from 60 to 100 modules; that was the accepted price, so do not
+quietly substitute hand-rolled HTTP calls.
 
-- Commands that talk to a live Vault server (probe the mount, generate policies
-  from team membership) — see the open decisions in `decisions.md`.
-- When that lands, it uses the official `hashicorp/vault/api` SDK, accepting
-  roughly forty indirect dependencies and a jump from ~7 MB to ~20 MB in the
-  binary ([ADR-0010](adr/0010-vault-official-sdk.md)). Do not quietly
-  substitute hand-rolled HTTP calls — that option was considered and rejected.
+What is still unbuilt is the original goal: **generating Vault policies from
+GitHub team membership**. `doctor` surfaces the teams, `vault` shows what a
+token resolves to, and nothing yet joins them. That is a write operation and
+needs its own design.
+
+Two things about `vault` that are easy to get wrong:
+
+- Mounts come from `sys/internal/ui/mounts`, never `sys/mounts`. The latter
+  needs a privileged policy and fails for exactly the least-privileged users
+  the command helps most.
+- The login fallback mints a token per invocation and never writes it to
+  `~/.vault-token` ([ADR-0015](adr/0015-vault-in-memory-login.md)). That is
+  deliberate, not an oversight: a query command should not install credentials
+  on a machine.
 
 ## The development machine
 
@@ -126,8 +138,10 @@ reliably breaks:
   what the test needs. There are no package-level seams any more
   ([ADR-0009](adr/0009-inject-dependencies.md)).
 - Never add an interactive prompt.
-- Never print or log a token. `internal/gh.Auth` deliberately carries the host,
-  the source and a boolean, not the secret.
+- Never print or log a token. `internal/gh.Auth` and `internal/vault.Token`
+  deliberately carry the host, the source and booleans, not secrets.
+  `gh.Token()` is the one function that returns the raw GitHub token, and it
+  exists solely for the Vault login.
 
 ## Open threads
 

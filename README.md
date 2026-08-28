@@ -26,10 +26,84 @@ gh cli-extension <command>
 
 | Command | Description |
 | --- | --- |
+| `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |
 | `version` | Print the extension version. |
+
+### `vault`
+
+Answers "what can I actually get at?" for the Vault token you are using.
+
+```
+$ gh cli-extension vault
+Vault  https://vault.example.com:8200
+       v1.17.2, unsealed (vault-prod)
+
+Token
+  display name   github-IanOliv
+  policies       default, platform-ro
+  ttl            767h (renewable)
+  entity         8f2a1c04
+
+Mounts (3 visible)
+  database/  database  read
+  kv/        kv-v2     read, list
+  platform/  kv-v2     read
+```
+
+Three subcommands drill in, and every one accepts `--json`:
+
+```sh
+gh cli-extension vault token              # policies and lifetime
+gh cli-extension vault mounts             # visible secret engines
+gh cli-extension vault can kv/data/prod/db  # capabilities at one path
+```
+
+```
+$ gh cli-extension vault can kv/data/prod/api
+kv/data/prod/api
+  create   no
+  read     no
+  update   no
+  patch    no
+  delete   no
+  list     no
+
+  also: deny
+```
+
+`can` resolves Vault's precedence rules rather than dumping the raw list:
+`deny` overrides everything, `root` permits everything. The raw capabilities
+are still in the `--json` output so you can see why.
+
+The capabilities shown beside each mount are for the **mount path**. For a KV v2
+engine the secrets live under `<mount>data/<path>` and may differ — use
+`vault can` for the precise answer.
+
+#### Configuration and authentication
+
+Standard `VAULT_*` environment variables apply (`VAULT_ADDR`,
+`VAULT_NAMESPACE`, the TLS settings), exactly as for the `vault` CLI.
+
+The Vault token is resolved in the same order the `vault` CLI uses, with one
+addition:
+
+1. `VAULT_TOKEN`
+2. `~/.vault-token`
+3. a login through Vault's GitHub auth method, using your `gh` credentials
+
+Step 3 is what ties this extension together: if you are authenticated with
+`gh`, `vault` works with no Vault login at all. That token lives only for the
+invocation and **is never written to disk**, so nothing is left behind — at the
+cost of a fresh login, and a new accessor in Vault, on every run. Run
+`vault login` yourself if you would rather reuse one token.
+
+Use `--auth-path` if the GitHub auth method is not mounted at `auth/github`.
+
+Logging in creates a real credential in Vault; everything else the command does
+is read-only. Secret *values* are never read or printed.
 
 ### `doctor`
 
@@ -126,6 +200,7 @@ Layout:
 main.go                  entrypoint; maps errors to exit codes
 cmd/                     cobra command tree, one file per subcommand
 internal/gh/             thin go-gh wrapper + the interfaces commands depend on
+internal/vault/          thin hashicorp/vault/api wrapper, same pattern
 script/build.sh          cross-compiles release binaries into ./dist
 ```
 

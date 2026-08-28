@@ -17,7 +17,10 @@ and [go-gh](https://github.com/cli/go-gh).
 - Wrap errors with `fmt.Errorf("doing thing: %w", err)`.
 - Print through `cmd.OutOrStdout()` / `cmd.ErrOrStderr()`, never `os.Stdout`.
 - Use `RunE`, not `Run`, and set `Args` on every cobra command.
-- Reach GitHub through `internal/gh`, not by shelling out to `gh`.
+- Reach GitHub through `internal/gh`, and Vault through `internal/vault`, not
+  by shelling out to the `gh` or `vault` binaries.
+- Never print a token. Display code uses `gh.CurrentAuth`, which cannot carry
+  a secret; `gh.Token()` exists only for the Vault login.
 - Add a test for every new subcommand, using a fake client — tests must not
   touch the network.
 
