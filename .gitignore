@@ -1,0 +1,21 @@
+# Compiled extension binary (built at the repo root, named after the repo)
+/gh-cli-extension
+/gh-cli-extension.exe
+
+# Cross-compiled release artifacts
+/dist/
+
+# Go test/coverage output
+*.test
+coverage.out
+coverage.html
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Local, machine-specific agent settings
+.claude/settings.local.json

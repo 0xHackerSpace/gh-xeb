@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "golang.go",
+    "github.copilot",
+    "github.copilot-chat",
+    "github.vscode-github-actions"
+  ]
+}

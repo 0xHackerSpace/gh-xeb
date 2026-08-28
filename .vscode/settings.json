@@ -1,0 +1,41 @@
+{
+  // Copilot picks up .github/copilot-instructions.md and
+  // .github/instructions/*.instructions.md for this workspace.
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    { "text": "Use imperative mood and mention the affected subcommand or package." }
+  ],
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go"
+  },
+  "go.lintOnSave": "package",
+  "go.vetOnSave": "package",
+  "workbench.colorCustomizations": {
+    "activityBar.activeBackground": "#59ba47",
+    "activityBar.background": "#59ba47",
+    "activityBar.foreground": "#15202b",
+    "activityBar.inactiveForeground": "#15202b99",
+    "activityBarBadge.background": "#e8eaf6",
+    "activityBarBadge.foreground": "#15202b",
+    "activityBarTop.activeBackground": "#59ba47",
+    "activityBarTop.background": "#59ba47",
+    "activityBarTop.foreground": "#15202b",
+    "activityBarTop.inactiveForeground": "#15202b99",
+    "commandCenter.border": "#e7e7e799",
+    "commandCenter.foreground": "#e7e7e7",
+    "sash.hoverBorder": "#59ba47",
+    "statusBar.background": "#479638",
+    "statusBar.debuggingBackground": "#479638",
+    "statusBar.debuggingForeground": "#e7e7e7",
+    "statusBar.foreground": "#e7e7e7",
+    "statusBarItem.hoverBackground": "#59ba47",
+    "statusBarItem.remoteBackground": "#3d4da2",
+    "statusBarItem.remoteForeground": "#e7e7e7",
+    "titleBar.activeBackground": "#479638",
+    "titleBar.activeForeground": "#e7e7e7",
+    "titleBar.inactiveBackground": "#47963899",
+    "titleBar.inactiveForeground": "#e7e7e799"
+  },
+  "peacock.remoteColor": "#479638"
+}
