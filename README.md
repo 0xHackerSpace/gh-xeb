@@ -124,7 +124,7 @@ Layout:
 
 ```
 main.go                  entrypoint; maps errors to exit codes
-internal/cmd/            cobra command tree, one file per subcommand
+cmd/                     cobra command tree, one file per subcommand
 internal/gh/             thin go-gh wrapper + the interfaces commands depend on
 script/build.sh          cross-compiles release binaries into ./dist
 ```

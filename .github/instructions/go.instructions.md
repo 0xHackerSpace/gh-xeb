@@ -7,7 +7,7 @@ applyTo: "**/*.go"
 - Format with `gofmt`; CI fails on unformatted files.
 - Every exported identifier in `internal/gh` gets a doc comment starting with
   its name.
-- Commands live in `internal/cmd`, one file per subcommand, each exposing a
+- Commands live in `cmd`, one file per subcommand, each exposing a
   `new<Name>Cmd() *cobra.Command` constructor registered in `NewRootCmd`.
 - Depend on the narrow interfaces in `internal/gh` (e.g. `RESTClient`), not on
   go-gh's concrete client types, so tests can substitute fakes.

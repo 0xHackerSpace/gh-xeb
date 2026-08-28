@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/cmd"
+	"github.com/0xHackerSpace/gh-cli-extension/cmd"
 )
 
 func main() {

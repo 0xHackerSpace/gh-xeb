@@ -34,7 +34,7 @@ Two naming rules come from the `gh` CLI itself and must not be changed casually:
 
 ```
 main.go                     Thin entrypoint: calls cmd.Execute, maps errors to exit codes.
-internal/cmd/               Cobra command tree. One file per subcommand.
+cmd/                        Cobra command tree. One file per subcommand.
   deps.go                   Deps struct: every way the tree reaches the outside world.
   root.go                   NewRootCmd(deps) wires subcommands together.
   whoami.go                 Example REST call through go-gh.
@@ -82,19 +82,22 @@ Go is pinned by `go.mod` (currently Go 1.25). If the local toolchain is older,
   behaviour genuinely only exists in the `gh` binary.
 - **Never prompt interactively.** Extensions run in pipes and CI; take input
   from flags and arguments.
-- Keep `internal/` internal. There is no public Go API to preserve here.
+- `internal/gh` stays internal: it is an implementation detail and nothing
+  outside this module may import it. `cmd/` is importable by other modules,
+  so treat its exported names (`Deps`, `NewRootCmd`, `Execute`, `SilentError`)
+  as a public surface — see [ADR-0013](docs/adr/0013-cmd-at-repo-root.md).
 
 ### Adding a subcommand
 
-1. Create `internal/cmd/<name>.go` with a `new<Name>Cmd(deps Deps)
+1. Create `cmd/<name>.go` with a `new<Name>Cmd(deps Deps)
    *cobra.Command` constructor — a constructor, not a package-level variable,
    so tests get a fresh command each run. Omit the parameter only if the
    command touches nothing outside the process, as `version` does.
 2. Set `Short`, `Args`, and `RunE` (never `Run`).
-3. Register it in `NewRootCmd` in `internal/cmd/root.go`.
+3. Register it in `NewRootCmd` in `cmd/root.go`.
 4. If it needs something not already on `Deps`, add the field there and wire it
    in `DefaultDeps()`.
-5. Add `internal/cmd/<name>_test.go` using `testDeps()` and `runRoot` from
+5. Add `cmd/<name>_test.go` using `testDeps()` and `runRoot` from
    `helpers_test.go`.
 6. Document the command in `README.md`.
 
@@ -103,7 +106,7 @@ Go is pinned by `go.mod` (currently Go 1.25). If the local toolchain is older,
 Push a `v*` tag. `.github/workflows/release.yml` runs
 `cli/gh-extension-precompile`, which invokes `script/build.sh` with the tag and
 attaches every binary in `dist/` to the GitHub release. The tag is baked into
-the binary via `-ldflags -X .../internal/cmd.version`.
+the binary via `-ldflags -X .../cmd.version`.
 
 ## Recording decisions
 

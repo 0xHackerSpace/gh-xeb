@@ -95,7 +95,15 @@ rather than assuming it every time.
 at the repo root, the release asset names, the Go module path, and the ldflags
 version path in both `Makefile` and `script/build.sh`. The ldflags one is the
 dangerous one: get it wrong and the build still succeeds, silently reporting the
-wrong version.
+wrong version. Moving the `cmd` package on 2026-08-28 changed that path in
+three files at once — always re-run `./script/build.sh v0.0.0-test` and check
+the binary reports the tag back.
+
+**The command tree is at `cmd`, not `internal/cmd`.** It moved on 2026-08-28
+([ADR-0013](adr/0013-cmd-at-repo-root.md)), which means it is importable from
+outside the module — unlike `internal/gh`, which stayed private. ADRs written
+before that date still say `internal/cmd`; they are historical records and were
+left alone on purpose.
 
 **`doctor` has two golden tests, both meant to be brittle.**
 `TestDoctorReport` pins the text layout; `TestDoctorJSONPayload` pins the JSON

@@ -38,3 +38,4 @@ invisible in the code.
 | [0010](0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | Accepted (not yet applied) |
 | [0011](0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | Accepted |
 | [0012](0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | Accepted |
+| [0013](0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | Accepted |

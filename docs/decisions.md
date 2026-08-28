@@ -19,6 +19,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0010](adr/0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | 2026-08-28 | Accepted (not yet applied) |
 | [0011](adr/0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | 2026-08-28 | Accepted |
 | [0012](adr/0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | 2026-08-28 | Accepted |
+| [0013](adr/0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | 2026-08-28 | Accepted |
 
 ## Smaller decisions, no ADR
 

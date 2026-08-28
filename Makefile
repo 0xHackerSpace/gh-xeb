@@ -1,6 +1,6 @@
 BINARY  := gh-cli-extension
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/0xHackerSpace/gh-cli-extension/internal/cmd.version=$(VERSION)
+LDFLAGS := -s -w -X github.com/0xHackerSpace/gh-cli-extension/cmd.version=$(VERSION)
 
 .DEFAULT_GOAL := check
 
