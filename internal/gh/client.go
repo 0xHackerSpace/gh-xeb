@@ -68,6 +68,23 @@ func CurrentAuth() Auth {
 	return Auth{Host: host, Source: describeSource(source), HasToken: token != ""}
 }
 
+// Token returns the raw GitHub token for the default host.
+//
+// This is the only place the secret is exposed, and it exists for exactly one
+// caller: authenticating against Vault's GitHub auth method, which needs the
+// token value itself. Never print it, never log it, never write it to disk.
+// Display code uses CurrentAuth, which deliberately cannot leak it.
+func Token() (string, error) {
+	host, _ := auth.DefaultHost()
+	token, _ := auth.TokenForHost(host)
+	if token == "" {
+		// No advice here: the caller knows what it wanted the token for and
+		// is better placed to say what to do about it.
+		return "", fmt.Errorf("no GitHub token for %s", host)
+	}
+	return token, nil
+}
+
 // describeSource turns go-gh's internal source keys into something a user can
 // act on. Unknown values are passed through rather than hidden.
 func describeSource(source string) string {

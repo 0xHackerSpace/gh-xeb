@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
+	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
 )
 
 // fakeREST serves canned JSON per path. Anything not in bodies is an error, so
@@ -64,7 +66,61 @@ func testDeps() Deps {
 		},
 		CLIVersion: func() (string, error) { return "2.4.0", nil },
 		Getenv:     func(string) string { return "" },
+
+		GitHubToken: func() (string, error) { return "gho_fake", nil },
+		NewVaultClient: func(context.Context, vault.Options) (vault.Client, error) {
+			return fakeVault{}, nil
+		},
 	}
+}
+
+// fakeVault is a Vault server that never was. Zero values are useful: a test
+// that only cares about mounts leaves the rest alone.
+type fakeVault struct {
+	addr      string
+	health    vault.Health
+	healthErr error
+	token     vault.Token
+	tokenErr  error
+	mounts    []vault.Mount
+	mountsErr error
+	caps      map[string][]string
+	capsErr   error
+}
+
+func (f fakeVault) Address() string {
+	if f.addr == "" {
+		return "https://vault.example.com:8200"
+	}
+	return f.addr
+}
+
+func (f fakeVault) Health(context.Context) (vault.Health, error) {
+	return f.health, f.healthErr
+}
+
+func (f fakeVault) Token(context.Context) (vault.Token, error) {
+	return f.token, f.tokenErr
+}
+
+func (f fakeVault) Mounts(context.Context) ([]vault.Mount, error) {
+	return f.mounts, f.mountsErr
+}
+
+func (f fakeVault) Capabilities(_ context.Context, path string) ([]string, error) {
+	if f.capsErr != nil {
+		return nil, f.capsErr
+	}
+	return f.caps[path], nil
+}
+
+// vaultDeps returns deps whose Vault client is the given fake.
+func vaultDeps(v vault.Client) Deps {
+	deps := testDeps()
+	deps.NewVaultClient = func(context.Context, vault.Options) (vault.Client, error) {
+		return v, nil
+	}
+	return deps
 }
 
 func runRoot(t *testing.T, deps Deps, args ...string) (string, error) {

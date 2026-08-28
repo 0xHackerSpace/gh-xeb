@@ -33,6 +33,7 @@ resolving the current repository, and shelling out to gh itself.`,
 	root.AddCommand(newWhoamiCmd(deps))
 	root.AddCommand(newRepoCmd(deps))
 	root.AddCommand(newDoctorCmd(deps))
+	root.AddCommand(newVaultCmd(deps))
 	root.AddCommand(newVersionCmd())
 
 	return root
