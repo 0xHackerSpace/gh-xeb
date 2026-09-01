@@ -40,7 +40,10 @@ cmd/                        Cobra command tree. One file per subcommand.
   whoami.go                 Example REST call through go-gh.
   repo.go                   Resolves the current repository like gh does.
   doctor.go                 GitHub identity + Vault-readiness diagnostics, text and JSON.
-  vault.go                  Vault resource queries: overview, token, mounts, can.
+  vault.go                  Vault resource queries: overview, token, mounts, can, get.
+  backstage.go              Backstage catalog: entities, ofertas, create, get, repo.
+  harness.go                Generates the agent SKILL.md from the live command tree.
+  json.go                   The shared --json encoder; doctor keeps its own.
   version.go                Version reporting; overridden via -ldflags at release.
   helpers_test.go           fakeREST, testDeps and runRoot, shared by every test.
 internal/gh/client.go       Thin wrapper over go-gh; defines the RESTClient interface.

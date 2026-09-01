@@ -28,6 +28,7 @@ gh xeb <command>
 | --- | --- |
 | `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`, `get <path>`. |
 | `backstage` | Query a Backstage software catalog and run its templates. Subcommands `entities`, `ofertas`, `create`, `get <ref>`, `repo`. |
+| `harness` | Teach a coding agent how to use this extension. Subcommand `install <agent>`. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |
@@ -377,6 +378,41 @@ BACKSTAGE_TOKEN=... gh xeb backstage repo
 Every subcommand is read-only. Entities are not created through this API —
 they are registered by committing a `catalog-info.yaml` and letting Backstage's
 discovery find it.
+
+### `harness`
+
+Coding agents are how this extension mostly gets driven, and an agent that does
+not know it exists will reach for `vault` and `curl` instead. `harness install`
+writes a skill file into the place an agent looks for one.
+
+```sh
+gh xeb harness install claude            # this project only
+gh xeb harness install copilot --global  # everywhere
+```
+
+| agent | project | `--global` |
+| --- | --- | --- |
+| `claude` | `.claude/skills/xeb/SKILL.md` | `~/.claude/skills/xeb/SKILL.md` |
+| `copilot` | `.github/skills/xeb/SKILL.md` | `~/.copilot/skills/xeb/SKILL.md` |
+
+```
+$ gh xeb harness install claude
+Wrote /home/you/work/api/.claude/skills/xeb/SKILL.md
+  Project scope: commit it to share with the repository.
+```
+
+The command list inside the skill is **generated from the live command tree**,
+so it cannot drift from the binary that wrote it — adding a subcommand and
+reinstalling is the whole update procedure. Alongside it are the things an
+agent cannot infer from `--help`: that tokens never go on the command line,
+that `backstage create` is the only command which changes anything outside the
+machine, and that secret values are masked deliberately rather than by
+accident.
+
+An existing file is never replaced without `--force`. `--dry-run` prints the
+destination and the document without writing; `--path` writes somewhere else
+entirely, for when an agent moves the goalposts
+([ADR-0022](docs/adr/0022-harness-install.md)).
 
 ### `doctor`
 

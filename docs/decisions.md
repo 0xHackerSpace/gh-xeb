@@ -28,6 +28,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0019](adr/0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | 2026-09-01 | Accepted (extended by 0020) |
 | [0020](adr/0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | 2026-09-01 | Accepted |
 | [0021](adr/0021-rename-to-xeb.md) | Rename the extension to `gh xeb` | 2026-09-01 | Accepted |
+| [0022](adr/0022-harness-install.md) | `harness install` generates the agent skill from the live command tree | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -151,6 +152,13 @@ was then is not wrong. Only ADR-0007's status line changed
 `docs/adr/` and nothing else, which is the right answer to "what was this
 called before?"
 
+**2026-09-01 — Agent skill roots were read off a machine, not off docs.**
+`~/.claude/skills/` and `~/.copilot/skills/` both existed with a `tfctl` skill
+in them, both using the same `SKILL.md` frontmatter. That is why
+[ADR-0022](adr/0022-harness-install.md) treats agents as a table of paths
+rather than one renderer each. `.github/skills/` for Copilot project scope is
+the one path that was inferred rather than observed.
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
@@ -182,6 +190,12 @@ request and is the way to keep that cheap.
 **Writing a secret.** The first mutating operation on a secret engine, and the
 one ADR-0017 names as its own revisit trigger. It needs an answer for where the
 value comes from, since it must not be a command-line argument.
+
+**Machine-checking the rules in the generated skill.** The command list in the
+skill cannot drift — a test walks the real tree. The rules beside it are a
+string constant and can. `TestBackstageHasNoTokenFlag` is the shape of the fix,
+applied to one rule; the rest are unguarded
+([ADR-0022](adr/0022-harness-install.md)).
 
 **A `backstage task <id>` command.** To follow or inspect a run someone else
 started, and the place scaffolder secrets would have to be solved
