@@ -22,6 +22,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0013](adr/0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | 2026-08-28 | Accepted |
 | [0014](adr/0014-vault-command.md) | `vault` reports the resources a token can reach | 2026-08-28 | Accepted |
 | [0015](adr/0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | 2026-08-28 | Accepted |
+| [0016](adr/0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -108,6 +109,19 @@ structurally cannot leak the token.
 command say what to do about it, rather than both appending "run: gh auth
 login" and printing it twice.
 
+**2026-09-01 — `encodeJSON` in `cmd/json.go` is shared; `doctor` keeps its
+own.** Every `--json` flag except `doctor`'s goes through one indented encoder.
+`doctor` renders a fixed document that two golden tests pin as a public
+contract, so it stays separate rather than being generalised into the shared
+path.
+
+**2026-09-01 — `backstage entities` treats an unset flag as absent, not as
+"field exists".** `Filter.Add(key)` with no values is a real catalog filter
+meaning the field is present, so passing an empty flag slice straight through
+would have made a bare `backstage entities` ask for entities that have a kind
+*and* a type *and* an owner. A test caught it; `addValues` now skips empty
+flags.
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
@@ -137,6 +151,13 @@ thing to try.
 natural next command; reading a secret's *value* needs its own decision about
 putting sensitive material on a terminal
 ([ADR-0014](adr/0014-vault-command.md)).
+
+**Should `doctor` know about Backstage?** It reports GitHub and Vault
+readiness. The catalog is now a third service the extension can be configured
+for, and `BACKSTAGE_BASE_URL` being unset is exactly the kind of thing `doctor`
+exists to notice — but [ADR-0011](adr/0011-doctor-scope.md) drew the line at
+not contacting anything, and it is worth deciding deliberately rather than
+drifting.
 
 **Generating Vault policies from GitHub team membership.** The original goal
 behind the extension, and the one part still unbuilt. `doctor` surfaces the

@@ -26,7 +26,8 @@ gh cli-extension <command>
 
 | Command | Description |
 | --- | --- |
-| `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`. |
+| `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`, `get <path>`. |
+| `backstage` | Query a Backstage software catalog. Subcommands `entities`, `get <ref>`, `repo`. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |
@@ -103,7 +104,120 @@ cost of a fresh login, and a new accessor in Vault, on every run. Run
 Use `--auth-path` if the GitHub auth method is not mounted at `auth/github`.
 
 Logging in creates a real credential in Vault; everything else the command does
-is read-only. Secret *values* are never read or printed.
+is read-only. `vault get` reads a secret's fields but masks the values unless
+you ask for them with `--reveal` or `--field`.
+
+### `backstage`
+
+Reads a [Backstage](https://backstage.io) Software Catalog: what exists, who
+owns it, what it depends on, and which entity describes the repository you are
+standing in.
+
+```
+$ gh cli-extension backstage
+Backstage  https://backstage.acme.dev
+
+Catalog (434 entities)
+  User        190
+  Component   128
+  API         54
+  Resource    31
+  Group       22
+  System      9
+```
+
+`entities` narrows the catalog down. Repeating a flag means *or*; different
+flags mean *and*.
+
+```
+$ gh cli-extension backstage entities --kind component --limit 4
+component:default/payments       service   production     group:default/payments
+component:default/payments-web   website   production     group:default/payments
+component:default/ledger         service   experimental   group:default/platform
+component:default/docs-site      website   -              -
+
+Showing 4 of 41; --all for the rest
+```
+
+`--filter` takes the catalog's own syntax for anything the flags do not cover.
+A bare key with no `=` matches entities where the field merely exists.
+
+```sh
+gh cli-extension backstage entities --filter 'relations.ownedBy=group:default/platform'
+gh cli-extension backstage entities --filter 'metadata.annotations.backstage.io/techdocs-ref'
+```
+
+`get` takes a reference — `[<kind>:][<namespace>/]<name>`, namespace defaulting
+to `default`.
+
+```
+$ gh cli-extension backstage get component:payments
+component:default/payments  Payments API
+
+  kind          Component
+  namespace     default
+  type          service
+  lifecycle     production
+  owner         group:default/payments
+  system        system:default/billing
+  description   Charges cards and reconciles settlements
+  tags          go, tier-1, pci
+  source        url:https://github.com/acme/payments/tree/main/
+  repository    acme/payments
+
+Relations
+  dependsOn      resource:default/payments-db
+                 component:default/ledger
+  ownedBy        group:default/payments
+  partOf         system:default/billing
+  providesApis   api:default/payments-v2
+```
+
+`repo` resolves the current repository the same way `gh` does and finds the
+entities annotated with it:
+
+```
+$ gh cli-extension backstage repo
+0xHackerSpace/gh-cli-extension
+
+component:default/gh-cli-extension   tool   experimental   group:default/platform
+```
+
+The link is the `github.com/project-slug` annotation, which Backstage's GitHub
+integrations write when they discover a `catalog-info.yaml`. An entity
+registered without it will not be found even though it describes this
+repository — the command says so rather than claiming the repository is
+unregistered:
+
+```
+$ gh cli-extension backstage repo
+0xHackerSpace/gh-cli-extension
+
+Not in the catalog: no entity is annotated github.com/project-slug=0xHackerSpace/gh-cli-extension
+```
+
+#### Configuration and authentication
+
+| Variable | Meaning |
+| --- | --- |
+| `BACKSTAGE_BASE_URL` | Backstage app address, e.g. `https://backstage.example.com`. `--url` overrides it. |
+| `BACKSTAGE_URL` | Fallback if the above is unset. |
+| `BACKSTAGE_TOKEN` | Bearer token. Optional — catalogs that allow anonymous reads work without one. |
+
+Give the app's address, not the API path: `/api/catalog` is appended per
+request. A bare host is assumed to be `https`.
+
+There is deliberately **no `--token` flag**. A secret passed as a command-line
+argument is visible in your shell history and in `ps` to every other user on
+the machine. For a one-off, prefix the invocation instead:
+
+```sh
+BACKSTAGE_TOKEN=... gh cli-extension backstage repo
+```
+
+Every subcommand is read-only. Entities are not created through this API —
+they are registered by committing a `catalog-info.yaml` and letting Backstage's
+discovery find it.
 
 ### `doctor`
 

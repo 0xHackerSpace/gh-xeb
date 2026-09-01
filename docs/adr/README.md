@@ -41,3 +41,4 @@ invisible in the code.
 | [0013](0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | Accepted |
 | [0014](0014-vault-command.md) | `vault` reports the resources a token can reach | Accepted |
 | [0015](0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | Accepted |
+| [0016](0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | Accepted |

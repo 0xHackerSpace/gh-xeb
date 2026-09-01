@@ -46,6 +46,10 @@ cmd/                        Cobra command tree. One file per subcommand.
 internal/gh/client.go       Thin wrapper over go-gh; defines the RESTClient interface.
 internal/vault/client.go    Thin wrapper over hashicorp/vault/api; defines Client.
   server_test.go            Drives the real SDK against an httptest stand-in Vault.
+internal/backstage/         Backstage Software Catalog API client (read-only).
+  client.go                 Transport, config, errors; defines Client.
+  entity.go                 Entity model, references, query and filter building.
+  server_test.go            Drives the client against an httptest stand-in catalog.
 script/build.sh             Cross-compiles release binaries into ./dist.
 docs/                       Project memory, decision log, and ADRs.
 .github/workflows/ci.yml    fmt + tidy + vet + race tests + cross-compile.
@@ -74,7 +78,7 @@ Go is pinned by `go.mod` (currently Go 1.25). If the local toolchain is older,
   directly.** Tests execute the command tree against a buffer.
 - **Wrap errors with context using `%w`**: `fmt.Errorf("fetching user: %w", err)`.
   Do not prefix messages with "error:" — the entrypoint adds the prefix.
-- **Do not call Vault or GitHub from tests.** For Vault, prefer the httptest
+- **Do not call Vault, Backstage or GitHub from tests.** For Vault, prefer the httptest
   stand-in in `internal/vault/server_test.go` when the decoding layer is in
   play — the `fakeVault` used by command tests bypasses every
   `map[string]interface{}` assertion, which is where the bugs live.
