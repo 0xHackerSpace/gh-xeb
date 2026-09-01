@@ -1,6 +1,6 @@
 # ADR-0019: `backstage ofertas` reshapes Templates into an offer catalogue
 
-- **Status:** Accepted
+- **Status:** Accepted (extended by [ADR-0020](0020-backstage-create.md))
 - **Date:** 2026-09-01
 - **Deciders:** @IanOliv
 - **Builds on:** [ADR-0016](0016-backstage-catalog-command.md).

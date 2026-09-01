@@ -27,7 +27,7 @@ gh cli-extension <command>
 | Command | Description |
 | --- | --- |
 | `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`, `get <path>`. |
-| `backstage` | Query a Backstage software catalog. Subcommands `entities`, `ofertas`, `get <ref>`, `repo`. |
+| `backstage` | Query a Backstage software catalog and run its templates. Subcommands `entities`, `ofertas`, `create`, `get <ref>`, `repo`. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |
@@ -208,6 +208,68 @@ is the order of the form pages; within a page, required fields come first and
 then alphabetical — the schema's own order inside a page is not recoverable
 once the entity is decoded ([ADR-0019](docs/adr/0019-backstage-ofertas.md)).
 Aliases: `offerings`, `templates`.
+
+#### Running a template
+
+`create` submits a template to the scaffolder. This is the one command in the
+tree that changes something outside your machine: a successful run creates a
+repository and registers it in the catalog, and interrupting the command does
+not undo any of it.
+
+```sh
+gh cli-extension backstage create terraform-module   --field name=s3-bucket   --field owner=group:default/guests   --field provider=aws   --field 'repoUrl=github.com?owner=acme&repo=terraform-s3-bucket'
+```
+
+Every value is checked against the template's own schema **before** anything is
+sent, so a mistake costs you nothing:
+
+```
+$ gh cli-extension backstage create terraform-module --field nome=x
+gh cli-extension: terraform-module has no parameter "nome" (it takes: description, name, owner, provider, repoUrl, system, terraformVersion)
+
+$ gh cli-extension backstage create terraform-module --field name=x
+gh cli-extension: terraform-module requires "owner", "provider", "repoUrl"
+```
+
+`--dry-run` goes one step further and shows exactly what would be submitted:
+
+```
+$ gh cli-extension backstage create terraform-module --field ... --dry-run
+template:default/terraform-module
+
+Would submit:
+  name       s3-bucket
+  owner      group:default/guests
+  provider   aws
+  repoUrl    github.com?owner=acme&repo=terraform-s3-bucket
+
+Nothing was sent. Drop --dry-run to run it.
+```
+
+Two things that catch people out:
+
+- **`repoUrl` is not a URL.** Backstage's repository picker encodes it as
+  `github.com?owner=acme&repo=payments`. Quote it — the `&` is a shell
+  operator.
+- **Types come from the schema.** `--field port=8080` is sent as a number and
+  `--field includeAdr=true` as a boolean, because that is what the template
+  declares. A parameter expecting an array or an object is refused: run those
+  from the portal.
+
+By default the run is followed and its log printed, ending in the template's
+output links; the command exits non-zero if the run fails.
+
+| Flag | |
+| --- | --- |
+| `--dry-run` | Validate and print what would be sent, without sending it |
+| `--no-wait` | Submit and print the task id |
+| `--timeout` | How long to follow the run, default 10m. The task outlives it |
+| `--json` | `id`, `status`, `url`, `log`, `output` |
+
+Scaffolder secrets are not supported: they would mean accepting a credential on
+the command line ([ADR-0020](docs/adr/0020-backstage-create.md)).
+
+#### Everything else
 
 `get` takes a reference — `[<kind>:][<namespace>/]<name>`, namespace defaulting
 to `default`.

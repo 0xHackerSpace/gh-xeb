@@ -22,10 +22,11 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0013](adr/0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | 2026-08-28 | Accepted |
 | [0014](adr/0014-vault-command.md) | `vault` reports the resources a token can reach | 2026-08-28 | Accepted (extended by 0017) |
 | [0015](adr/0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | 2026-08-28 | Accepted |
-| [0016](adr/0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | 2026-09-01 | Accepted |
+| [0016](adr/0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | 2026-09-01 | Accepted (amended by 0020) |
 | [0017](adr/0017-vault-get-masked-by-default.md) | `vault get` reads secret values but masks them by default | 2026-09-01 | Accepted |
 | [0018](adr/0018-backstage-config-from-vault.md) | `backstage` can take its address and token from a Vault secret | 2026-09-01 | Accepted |
-| [0019](adr/0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | 2026-09-01 | Accepted |
+| [0019](adr/0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | 2026-09-01 | Accepted (extended by 0020) |
+| [0020](adr/0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -132,6 +133,16 @@ namespaced.** That endpoint exists only at the root, so sending
 `api.WithNamespace("")`. It surfaced on HCP Vault, where the variable is always
 set, and is invisible on a dev server, where it never is.
 
+**2026-09-01 — A scaffolder task's rendered output is only in its completion
+event.** `GET /tasks/{id}` returns `spec.output` with the template's `${{ }}`
+placeholders *unrendered*; printing it would show a user the template source
+instead of their new repository's URL. The real values arrive in the final
+event from `/tasks/{id}/events`. Found by probing a live instance.
+
+**2026-09-01 — `repoUrl` is not a URL.** Backstage's `RepoUrlPicker` encodes it
+as `github.com?owner=acme&repo=payments`. Every first attempt at
+`backstage create` gets this wrong, so it is in the help text and the README.
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
@@ -167,6 +178,15 @@ request and is the way to keep that cheap.
 **Writing a secret.** The first mutating operation on a secret engine, and the
 one ADR-0017 names as its own revisit trigger. It needs an answer for where the
 value comes from, since it must not be a command-line argument.
+
+**A `backstage task <id>` command.** To follow or inspect a run someone else
+started, and the place scaffolder secrets would have to be solved
+([ADR-0020](adr/0020-backstage-create.md)). Today a task can only be watched by
+the invocation that created it.
+
+**Taking `create` values from a file** rather than repeated `--field`. Better
+once a template has a dozen parameters; worse for the two-or-three case the
+command is for today.
 
 **Rendering `spec.parameters` in `backstage get`.** `ofertas` now renders them
 for every template ([ADR-0019](adr/0019-backstage-ofertas.md)); `get` still

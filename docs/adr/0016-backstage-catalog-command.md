@@ -1,6 +1,6 @@
 # ADR-0016: `backstage` reads the software catalog through a hand-written client
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by [ADR-0020](0020-backstage-create.md), which added the first write)
 - **Date:** 2026-09-01
 - **Deciders:** @IanOliv
 - **Departs from:** [ADR-0010](0010-vault-official-sdk.md) on the specific

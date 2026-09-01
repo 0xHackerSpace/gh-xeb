@@ -91,13 +91,20 @@ for whatever describes the repository you are standing in
 ([ADR-0016](adr/0016-backstage-catalog-command.md),
 [ADR-0019](adr/0019-backstage-ofertas.md)).
 
+`backstage create` runs a template ([ADR-0020](adr/0020-backstage-create.md)).
+It is **the only thing this extension does that changes state in a system it
+does not own** — a successful run creates a GitHub repository. There is no
+confirmation prompt because AGENTS.md forbids one; the protection is that every
+value is validated against the template's schema before anything is submitted,
+plus `--dry-run`.
+
 `--vault-secret <path>` takes the address and the token out of the environment
 and reads them from a Vault KV secret instead
 ([ADR-0018](adr/0018-backstage-config-from-vault.md)). It is the first place
 the two services the extension talks to are joined, and the join lives in
 `cmd/` on purpose — `internal/backstage` does not import `internal/vault`.
 
-Four things worth knowing before changing it:
+Six things worth knowing before changing it:
 
 - `internal/backstage` is **hand-written over `net/http`**, not an SDK, because
   Backstage publishes no official Go client. That is the opposite call from
@@ -111,6 +118,12 @@ Four things worth knowing before changing it:
   repository, and the output says which annotation it looked for rather than
   claiming the repository is unregistered.
 
+- A task's **rendered** output is only in its completion event. `GET
+  /tasks/{id}` returns `spec.output` with the `${{ }}` placeholders still in
+  it, so printing that would show a user the template source instead of their
+  new repository's URL.
+- `repoUrl` is not a URL: the picker encodes it as
+  `github.com?owner=acme&repo=payments`.
 - Vault is contacted **only** when `--vault-secret` or
   `BACKSTAGE_VAULT_SECRET` is set. A test fails the build if that becomes
   unconditional, which would add a Vault dependency to every catalog query.
