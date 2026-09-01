@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -13,10 +14,11 @@ import (
 // bypass all of it.
 
 type recordedRequest struct {
-	method string
-	path   string
-	token  string
-	body   map[string]interface{}
+	method    string
+	path      string
+	token     string
+	namespace string
+	body      map[string]interface{}
 }
 
 func newStandInVault(t *testing.T, recorder *[]recordedRequest) *httptest.Server {
@@ -33,10 +35,11 @@ func newStandInVault(t *testing.T, recorder *[]recordedRequest) *httptest.Server
 			_ = json.NewDecoder(r.Body).Decode(&body)
 		}
 		*recorder = append(*recorder, recordedRequest{
-			method: r.Method,
-			path:   r.URL.Path,
-			token:  r.Header.Get("X-Vault-Token"),
-			body:   body,
+			method:    r.Method,
+			path:      r.URL.Path,
+			token:     r.Header.Get("X-Vault-Token"),
+			namespace: r.Header.Get("X-Vault-Namespace"),
+			body:      body,
 		})
 	}
 
@@ -101,6 +104,53 @@ func newStandInVault(t *testing.T, recorder *[]recordedRequest) *httptest.Server
 				"policies":     []string{"default", "platform-ro"},
 			},
 		})
+	})
+
+	// KV mount resolution: the preflight the vault CLI does before a read.
+	mux.HandleFunc("/v1/sys/internal/ui/mounts/", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		target := strings.TrimPrefix(r.URL.Path, "/v1/sys/internal/ui/mounts/")
+		switch {
+		case strings.HasPrefix(target, "secret/"):
+			write(w, map[string]interface{}{"data": map[string]interface{}{
+				"path": "secret/", "type": "kv",
+				"options": map[string]interface{}{"version": "2"},
+			}})
+		case strings.HasPrefix(target, "legacy/"):
+			write(w, map[string]interface{}{"data": map[string]interface{}{
+				"path": "legacy/", "type": "kv",
+				"options": map[string]interface{}{"version": "1"},
+			}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			write(w, map[string]interface{}{"errors": []string{"no mount"}})
+		}
+	})
+
+	// KV v2 data path.
+	mux.HandleFunc("/v1/secret/data/prod/db", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		write(w, map[string]interface{}{"data": map[string]interface{}{
+			"data": map[string]interface{}{
+				"password": "s3cr3t", "port": 5432, "tags": []string{"a", "b"}, "empty": "",
+			},
+			"metadata": map[string]interface{}{"version": 3},
+		}})
+	})
+
+	// A soft-deleted v2 secret: metadata survives, data is null.
+	mux.HandleFunc("/v1/secret/data/prod/gone", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		write(w, map[string]interface{}{"data": map[string]interface{}{
+			"data":     nil,
+			"metadata": map[string]interface{}{"version": 2, "destroyed": false},
+		}})
+	})
+
+	// KV v1 stores the payload flat, with no data/ segment.
+	mux.HandleFunc("/v1/legacy/creds", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		write(w, map[string]interface{}{"data": map[string]interface{}{"user": "root"}})
 	})
 
 	// Catch-all so an unexpected path is still recorded; without it the mux's
@@ -294,5 +344,160 @@ func TestClientPrefersTokenOnDiskOverLoggingIn(t *testing.T) {
 	}
 	if seen[0].token != "token-from-disk" {
 		t.Errorf("the on-disk token should be used verbatim, got %q", seen[0].token)
+	}
+}
+
+// TestHealthIsReadAtTheRootNamespace is a regression test for a bug found
+// against a real HCP Vault cluster.
+//
+// sys/health exists only in the root namespace. Sending VAULT_NAMESPACE with
+// it -- which every HCP user has set -- asks for <namespace>/sys/health and
+// Vault answers 404 "unsupported path", so the whole command failed before it
+// could show anything. Every other endpoint is namespaced and must keep the
+// header.
+func TestHealthIsReadAtTheRootNamespace(t *testing.T) {
+	var seen []recordedRequest
+	srv := newStandInVault(t, &seen)
+	isolate(t, srv)
+	t.Setenv("VAULT_TOKEN", "existing-token")
+	t.Setenv("VAULT_NAMESPACE", "admin")
+
+	ctx := context.Background()
+	c, err := New(ctx, Options{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := c.Health(ctx); err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+	if _, err := c.Token(ctx); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if _, err := c.Mounts(ctx); err != nil {
+		t.Fatalf("Mounts: %v", err)
+	}
+
+	byPath := map[string]recordedRequest{}
+	for _, r := range seen {
+		byPath[r.path] = r
+	}
+
+	if ns := byPath["/v1/sys/health"].namespace; ns != "" {
+		t.Errorf("sys/health must be read at the root namespace, got %q", ns)
+	}
+	for _, path := range []string{"/v1/auth/token/lookup-self", "/v1/sys/internal/ui/mounts"} {
+		if ns := byPath[path].namespace; ns != "admin" {
+			t.Errorf("%s must keep the namespace, got %q", path, ns)
+		}
+	}
+}
+
+func TestReadSecretKVv2(t *testing.T) {
+	var seen []recordedRequest
+	srv := newStandInVault(t, &seen)
+	isolate(t, srv)
+	t.Setenv("VAULT_TOKEN", "existing-token")
+
+	c, err := New(context.Background(), Options{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	s, err := c.ReadSecret(context.Background(), "secret/prod/db")
+	if err != nil {
+		t.Fatalf("ReadSecret: %v", err)
+	}
+
+	// The logical path must have been rewritten to the data/ path.
+	var read bool
+	for _, r := range seen {
+		if r.path == "/v1/secret/data/prod/db" {
+			read = true
+		}
+	}
+	if !read {
+		t.Errorf("expected a read of the data/ path, saw %+v", seen)
+	}
+
+	if s.MountType != "kv-v2" || s.Version != 3 {
+		t.Errorf("mount/version not decoded: %+v", s)
+	}
+	if s.Data["password"] != "s3cr3t" {
+		t.Errorf("password: %q", s.Data["password"])
+	}
+	// Non-string values must survive as something usable, not map[a:b].
+	if s.Data["port"] != "5432" {
+		t.Errorf("a number should render as digits, got %q", s.Data["port"])
+	}
+	if s.Data["tags"] != `["a","b"]` {
+		t.Errorf("a list should render as JSON, got %q", s.Data["tags"])
+	}
+	if s.Data["empty"] != "" {
+		t.Errorf("empty string should stay empty, got %q", s.Data["empty"])
+	}
+	if got := s.Keys(); got[0] != "empty" || len(got) != 4 {
+		t.Errorf("Keys() should be sorted and complete, got %v", got)
+	}
+}
+
+func TestReadSecretAcceptsTheAPIPathToo(t *testing.T) {
+	var seen []recordedRequest
+	srv := newStandInVault(t, &seen)
+	isolate(t, srv)
+	t.Setenv("VAULT_TOKEN", "existing-token")
+
+	c, _ := New(context.Background(), Options{})
+
+	// Users reach for the API path after using `vault can`. It must not become
+	// secret/data/data/prod/db.
+	if _, err := c.ReadSecret(context.Background(), "secret/data/prod/db"); err != nil {
+		t.Fatalf("ReadSecret: %v", err)
+	}
+	for _, r := range seen {
+		if strings.Contains(r.path, "data/data") {
+			t.Fatalf("path was rewritten twice: %s", r.path)
+		}
+	}
+}
+
+func TestReadSecretKVv1(t *testing.T) {
+	var seen []recordedRequest
+	srv := newStandInVault(t, &seen)
+	isolate(t, srv)
+	t.Setenv("VAULT_TOKEN", "existing-token")
+
+	c, _ := New(context.Background(), Options{})
+
+	s, err := c.ReadSecret(context.Background(), "legacy/creds")
+	if err != nil {
+		t.Fatalf("ReadSecret: %v", err)
+	}
+	if s.Data["user"] != "root" {
+		t.Errorf("v1 payload is flat, got %+v", s.Data)
+	}
+	if s.Version != 0 {
+		t.Errorf("v1 has no versions, got %d", s.Version)
+	}
+	for _, r := range seen {
+		if strings.Contains(r.path, "/data/") {
+			t.Errorf("a v1 path must not gain a data/ segment: %s", r.path)
+		}
+	}
+}
+
+func TestReadSecretOnDeletedVersionSaysSo(t *testing.T) {
+	srv := newStandInVault(t, nil)
+	isolate(t, srv)
+	t.Setenv("VAULT_TOKEN", "existing-token")
+
+	c, _ := New(context.Background(), Options{})
+
+	_, err := c.ReadSecret(context.Background(), "secret/prod/gone")
+	if err == nil {
+		t.Fatal("a deleted version should be an error, not an empty secret")
+	}
+	if !strings.Contains(err.Error(), "deleted") {
+		t.Errorf("the error should hint at deletion, got: %v", err)
 	}
 }

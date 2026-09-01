@@ -5,6 +5,7 @@ package vault
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -52,6 +53,7 @@ type Client interface {
 	Token(ctx context.Context) (Token, error)
 	Mounts(ctx context.Context) ([]Mount, error)
 	Capabilities(ctx context.Context, path string) ([]string, error)
+	ReadSecret(ctx context.Context, path string) (Secret, error)
 }
 
 // Options configures how a client authenticates.
@@ -163,8 +165,13 @@ func (c *client) loginWithGitHub(ctx context.Context, authPath, githubToken stri
 
 func (c *client) Address() string { return c.api.Address() }
 
+// Health reads sys/health, which lives only in the root namespace. Sending
+// VAULT_NAMESPACE with it -- as HCP Vault users always have set -- asks for
+// <namespace>/sys/health and gets a 404 "unsupported path", so the namespace
+// is stripped for this one call. Every other endpoint here is namespaced and
+// must keep it.
 func (c *client) Health(ctx context.Context) (Health, error) {
-	resp, err := c.api.Sys().HealthWithContext(ctx)
+	resp, err := c.api.WithNamespace("").Sys().HealthWithContext(ctx)
 	if err != nil {
 		return Health{}, fmt.Errorf("reading %s health: %w", c.Address(), err)
 	}
@@ -341,4 +348,135 @@ func stringSlice(v interface{}) []string {
 // Vault returns them from a map, in whatever order Go feels like.
 func sortMounts(mounts []Mount) {
 	sort.Slice(mounts, func(i, j int) bool { return mounts[i].Path < mounts[j].Path })
+}
+
+// ---------------------------------------------------------------------------
+// Reading secrets
+// ---------------------------------------------------------------------------
+
+// Secret is one KV entry. Values are strings because that is what a terminal
+// and a JSON consumer can both use; non-string values are re-encoded as JSON
+// rather than rendered with Go's %v, which would emit map[a:b] and be useless.
+type Secret struct {
+	Path      string            `json:"path"`
+	Mount     string            `json:"mount"`
+	MountType string            `json:"mountType"`
+	Version   int               `json:"version,omitempty"`
+	Data      map[string]string `json:"data"`
+}
+
+// Keys returns the field names in a stable order.
+func (s Secret) Keys() []string {
+	keys := make([]string, 0, len(s.Data))
+	for k := range s.Data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ReadSecret reads a KV secret, accepting the logical path the vault CLI takes
+// (secret/prod/db) rather than the API path (secret/data/prod/db). Which of
+// the two Vault wants depends on whether the mount is KV v1 or v2, so the
+// mount is looked up first -- the same preflight the vault CLI performs.
+func (c *client) ReadSecret(ctx context.Context, path string) (Secret, error) {
+	path = strings.TrimPrefix(path, "/")
+
+	mount, mountType, v2, err := c.kvMount(ctx, path)
+	if err != nil {
+		return Secret{}, err
+	}
+
+	apiPath := path
+	if v2 {
+		apiPath = kvDataPath(mount, path)
+	}
+
+	secret, err := c.api.Logical().ReadWithContext(ctx, apiPath)
+	if err != nil {
+		return Secret{}, fmt.Errorf("reading %s: %w", apiPath, err)
+	}
+	if secret == nil {
+		return Secret{}, fmt.Errorf("no secret at %s", path)
+	}
+
+	out := Secret{Path: path, Mount: mount, MountType: mountType}
+
+	raw := secret.Data
+	if v2 {
+		// A v2 response nests the payload under data, with metadata alongside.
+		inner, _ := secret.Data["data"].(map[string]interface{})
+		if inner == nil {
+			return Secret{}, fmt.Errorf("no secret at %s (it may be deleted; check the metadata)", path)
+		}
+		raw = inner
+
+		if meta, ok := secret.Data["metadata"].(map[string]interface{}); ok {
+			if n, ok := meta["version"].(json.Number); ok {
+				if v, err := n.Int64(); err == nil {
+					out.Version = int(v)
+				}
+			}
+		}
+	}
+
+	out.Data = make(map[string]string, len(raw))
+	for k, v := range raw {
+		out.Data[k] = renderValue(v)
+	}
+	return out, nil
+}
+
+// kvMount asks Vault which engine backs a path and whether it is KV v2.
+func (c *client) kvMount(ctx context.Context, path string) (mount, mountType string, v2 bool, err error) {
+	secret, err := c.api.Logical().ReadWithContext(ctx, "sys/internal/ui/mounts/"+path)
+	if err != nil {
+		return "", "", false, fmt.Errorf("resolving the mount for %q: %w", path, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return "", "", false, fmt.Errorf("no mount serves %q", path)
+	}
+
+	mount = stringField(secret.Data, "path")
+	mountType = stringField(secret.Data, "type")
+
+	if options, ok := secret.Data["options"].(map[string]interface{}); ok {
+		if stringField(options, "version") == "2" {
+			v2 = true
+			mountType = "kv-v2"
+		}
+	}
+	return mount, mountType, v2, nil
+}
+
+// kvDataPath rewrites secret/prod/db into secret/data/prod/db.
+//
+// A path that already carries the data/ segment is left alone, so the API path
+// works too -- users reach for it after using `vault can`, which takes API
+// paths. The cost is that a v2 secret literally named "data" is unreachable
+// this way; the vault CLI has the same ambiguity.
+func kvDataPath(mount, path string) string {
+	rest := strings.TrimPrefix(path, mount)
+	if rest == "data" || strings.HasPrefix(rest, "data/") {
+		return path
+	}
+	return mount + "data/" + rest
+}
+
+// renderValue turns a decoded JSON value into something printable, keeping
+// structure as JSON instead of Go's map[a:b] formatting.
+func renderValue(v interface{}) string {
+	switch typed := v.(type) {
+	case string:
+		return typed
+	case nil:
+		return ""
+	case json.Number:
+		return typed.String()
+	default:
+		if encoded, err := json.Marshal(typed); err == nil {
+			return string(encoded)
+		}
+		return fmt.Sprintf("%v", typed)
+	}
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,6 +61,7 @@ Every subcommand accepts --json.`,
 		newVaultTokenCmd(deps, &opts),
 		newVaultMountsCmd(deps, &opts),
 		newVaultCanCmd(deps, &opts),
+		newVaultGetCmd(deps, &opts),
 	)
 
 	return root
@@ -370,4 +372,143 @@ func writeVaultJSON(w io.Writer, payload interface{}) error {
 		return fmt.Errorf("encoding JSON: %w", err)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// vault get
+// ---------------------------------------------------------------------------
+
+func newVaultGetCmd(deps Deps, opts *vaultOpts) *cobra.Command {
+	var reveal bool
+	var field string
+
+	c := &cobra.Command{
+		Use:   "get <path>",
+		Short: "Read a KV secret, with values masked by default",
+		Long: `get reads a KV secret and, by default, shows which fields exist and how long
+each value is -- without printing the values themselves. A secret should not
+land in your scrollback, or in a CI log, just because you looked at it.
+
+  --reveal        print every value
+  --field <key>   print one value raw, with no formatting, for piping
+
+--field implies you asked for that specific value, so it is never masked.
+
+The path is the logical one the vault CLI takes ('secret/prod/db'), not the API
+path. Whether Vault wants 'secret/data/prod/db' depends on the engine being KV
+v2, which is resolved for you. An API path with the data/ segment already in it
+is accepted too.
+
+With --json the values are masked unless --reveal is given, and the payload
+says which it was.`,
+		Example: `  gh cli-extension vault get secret/prod/db
+  gh cli-extension vault get secret/prod/db --reveal
+  gh cli-extension vault get secret/prod/db --field password | pbcopy`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			if field != "" && reveal {
+				return errors.New("--field already prints the value; --reveal adds nothing")
+			}
+
+			return withClient(c, deps, *opts, func(ctx context.Context, client vault.Client) error {
+				secret, err := client.ReadSecret(ctx, args[0])
+				if err != nil {
+					return err
+				}
+
+				if field != "" {
+					value, ok := secret.Data[field]
+					if !ok {
+						return fmt.Errorf("no field %q in %s (has: %s)",
+							field, secret.Path, strings.Join(secret.Keys(), ", "))
+					}
+					// Raw, unadorned, newline-terminated: this is piped.
+					fmt.Fprintln(c.OutOrStdout(), value)
+					return nil
+				}
+
+				if opts.asJSON {
+					return writeVaultJSON(c.OutOrStdout(), secretPayload(secret, reveal))
+				}
+				writeSecret(c.OutOrStdout(), secret, reveal)
+				return nil
+			})
+		},
+	}
+
+	c.Flags().BoolVar(&reveal, "reveal", false, "Print the secret values instead of masking them")
+	c.Flags().StringVar(&field, "field", "", "Print only this field's value, raw and unmasked")
+
+	return c
+}
+
+func secretPayload(s vault.Secret, reveal bool) map[string]interface{} {
+	data := make(map[string]string, len(s.Data))
+	for k, v := range s.Data {
+		if reveal {
+			data[k] = v
+		} else {
+			data[k] = maskOf(v)
+		}
+	}
+	return map[string]interface{}{
+		"path":      s.Path,
+		"mount":     s.Mount,
+		"mountType": s.MountType,
+		"version":   s.Version,
+		"masked":    !reveal,
+		"data":      data,
+	}
+}
+
+func writeSecret(w io.Writer, s vault.Secret, reveal bool) {
+	header := s.MountType
+	if s.Version > 0 {
+		header = fmt.Sprintf("%s, version %d", s.MountType, s.Version)
+	}
+	fmt.Fprintf(w, "%s  %s\n\n", s.Path, header)
+
+	if len(s.Data) == 0 {
+		fmt.Fprintln(w, "  (no fields)")
+		return
+	}
+
+	// Buffered so trailing padding can be stripped: an empty field would
+	// otherwise leave the key column's spaces dangling at end of line.
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 0, 0, 3, ' ', 0)
+	for _, k := range s.Keys() {
+		value := s.Data[k]
+		if !reveal {
+			value = maskOf(value)
+		}
+		fmt.Fprintf(tw, "  %s\t%s\n", k, value)
+	}
+	tw.Flush()
+	writeTrimmed(w, buf.String())
+
+	if !reveal {
+		fmt.Fprintln(w, "\n  --reveal to print values, --field <key> for one")
+	}
+}
+
+// writeTrimmed emits tabwriter output with trailing padding removed from each
+// line, so an empty value does not leave invisible whitespace behind.
+func writeTrimmed(w io.Writer, block string) {
+	for _, line := range strings.Split(strings.TrimRight(block, "\n"), "\n") {
+		fmt.Fprintln(w, strings.TrimRight(line, " "))
+	}
+}
+
+// maskOf hides a value but keeps its length, which is enough to tell an empty
+// field from a populated one and a passphrase from a fingerprint.
+func maskOf(value string) string {
+	if value == "" {
+		return "(empty)"
+	}
+	unit := "chars"
+	if len(value) == 1 {
+		unit = "char"
+	}
+	return fmt.Sprintf("******** (%d %s)", len(value), unit)
 }

@@ -86,6 +86,8 @@ type fakeVault struct {
 	mountsErr error
 	caps      map[string][]string
 	capsErr   error
+	secrets   map[string]vault.Secret
+	secretErr error
 }
 
 func (f fakeVault) Address() string {
@@ -112,6 +114,17 @@ func (f fakeVault) Capabilities(_ context.Context, path string) ([]string, error
 		return nil, f.capsErr
 	}
 	return f.caps[path], nil
+}
+
+func (f fakeVault) ReadSecret(_ context.Context, path string) (vault.Secret, error) {
+	if f.secretErr != nil {
+		return vault.Secret{}, f.secretErr
+	}
+	s, ok := f.secrets[path]
+	if !ok {
+		return vault.Secret{}, fmt.Errorf("no secret at %s", path)
+	}
+	return s, nil
 }
 
 // vaultDeps returns deps whose Vault client is the given fake.
