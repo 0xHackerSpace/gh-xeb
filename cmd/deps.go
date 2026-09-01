@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
 )
@@ -22,6 +23,9 @@ type Deps struct {
 	GitHubToken func() (string, error)
 	// NewVaultClient authenticates against Vault; see internal/vault.
 	NewVaultClient func(context.Context, vault.Options) (vault.Client, error)
+	// NewBackstageClient talks to a Backstage catalog; see internal/backstage.
+	// It takes no context: the constructor performs no I/O.
+	NewBackstageClient func(backstage.Config) (backstage.Client, error)
 }
 
 // DefaultDeps wires the real implementations.
@@ -33,7 +37,8 @@ func DefaultDeps() Deps {
 		CLIVersion:    gh.CLIVersion,
 		Getenv:        os.Getenv,
 
-		GitHubToken:    gh.Token,
-		NewVaultClient: vault.New,
+		GitHubToken:        gh.Token,
+		NewVaultClient:     vault.New,
+		NewBackstageClient: backstage.New,
 	}
 }

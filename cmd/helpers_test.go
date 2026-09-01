@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
 )
@@ -71,6 +72,9 @@ func testDeps() Deps {
 		NewVaultClient: func(context.Context, vault.Options) (vault.Client, error) {
 			return fakeVault{}, nil
 		},
+		NewBackstageClient: func(backstage.Config) (backstage.Client, error) {
+			return &fakeBackstage{}, nil
+		},
 	}
 }
 
@@ -125,6 +129,74 @@ func (f fakeVault) ReadSecret(_ context.Context, path string) (vault.Secret, err
 		return vault.Secret{}, fmt.Errorf("no secret at %s", path)
 	}
 	return s, nil
+}
+
+// fakeBackstage is a catalog that never was. It records the queries it is
+// given so a test can assert on the filters a command built, which is where
+// the interesting logic lives.
+type fakeBackstage struct {
+	addr string
+
+	facets    map[string][]backstage.Facet
+	facetsErr error
+
+	page     backstage.EntityPage
+	pageErr  error
+	entities []backstage.Entity
+	allErr   error
+
+	byRef     map[string]backstage.Entity
+	entityErr error
+
+	// queries records every EntityQuery the command passed in, in order.
+	queries []backstage.EntityQuery
+	// refs records every EntityRef looked up.
+	refs []backstage.EntityRef
+}
+
+func (f *fakeBackstage) BaseURL() string {
+	if f.addr == "" {
+		return "https://backstage.example.com"
+	}
+	return f.addr
+}
+
+func (f *fakeBackstage) Ping(ctx context.Context) error {
+	_, err := f.Facets(ctx, "kind")
+	return err
+}
+
+func (f *fakeBackstage) Facets(_ context.Context, _ ...string) (map[string][]backstage.Facet, error) {
+	return f.facets, f.facetsErr
+}
+
+func (f *fakeBackstage) Entities(_ context.Context, q backstage.EntityQuery) (backstage.EntityPage, error) {
+	f.queries = append(f.queries, q)
+	return f.page, f.pageErr
+}
+
+func (f *fakeBackstage) AllEntities(_ context.Context, q backstage.EntityQuery) ([]backstage.Entity, error) {
+	f.queries = append(f.queries, q)
+	return f.entities, f.allErr
+}
+
+func (f *fakeBackstage) Entity(_ context.Context, ref backstage.EntityRef) (backstage.Entity, error) {
+	f.refs = append(f.refs, ref)
+	if f.entityErr != nil {
+		return backstage.Entity{}, f.entityErr
+	}
+	entity, ok := f.byRef[ref.String()]
+	if !ok {
+		return backstage.Entity{}, fmt.Errorf("no entity %s in the catalog: %w", ref, backstage.ErrNotFound)
+	}
+	return entity, nil
+}
+
+// backstageDeps returns deps whose Backstage client is the given fake.
+func backstageDeps(c backstage.Client) Deps {
+	deps := testDeps()
+	deps.NewBackstageClient = func(backstage.Config) (backstage.Client, error) { return c, nil }
+	return deps
 }
 
 // vaultDeps returns deps whose Vault client is the given fake.

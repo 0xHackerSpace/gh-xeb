@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -115,7 +114,7 @@ func runOverview(w io.Writer, ctx context.Context, client vault.Client, asJSON b
 	}
 
 	if asJSON {
-		return writeVaultJSON(w, map[string]interface{}{
+		return encodeJSON(w, map[string]interface{}{
 			"address": client.Address(),
 			"health":  health,
 			"token":   token,
@@ -180,7 +179,7 @@ The token value itself is never printed.`,
 					return err
 				}
 				if opts.asJSON {
-					return writeVaultJSON(c.OutOrStdout(), token)
+					return encodeJSON(c.OutOrStdout(), token)
 				}
 				writeTokenLines(c.OutOrStdout(), token, "")
 				return nil
@@ -242,7 +241,7 @@ use 'vault can' to check a specific path.`,
 					return err
 				}
 				if opts.asJSON {
-					return writeVaultJSON(c.OutOrStdout(), map[string]interface{}{"mounts": mounts})
+					return encodeJSON(c.OutOrStdout(), map[string]interface{}{"mounts": mounts})
 				}
 				writeMountLines(c.OutOrStdout(), mounts, "")
 				return nil
@@ -291,7 +290,7 @@ is 'kv/data/prod/db'.`,
 					return err
 				}
 				if opts.asJSON {
-					return writeVaultJSON(c.OutOrStdout(), capabilityPayload(path, caps))
+					return encodeJSON(c.OutOrStdout(), capabilityPayload(path, caps))
 				}
 				writeCapabilities(c.OutOrStdout(), path, caps)
 				return nil
@@ -362,19 +361,6 @@ func writeCapabilities(w io.Writer, path string, caps []string) {
 }
 
 // ---------------------------------------------------------------------------
-// JSON
-// ---------------------------------------------------------------------------
-
-func writeVaultJSON(w io.Writer, payload interface{}) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(payload); err != nil {
-		return fmt.Errorf("encoding JSON: %w", err)
-	}
-	return nil
-}
-
-// ---------------------------------------------------------------------------
 // vault get
 // ---------------------------------------------------------------------------
 
@@ -428,7 +414,7 @@ says which it was.`,
 				}
 
 				if opts.asJSON {
-					return writeVaultJSON(c.OutOrStdout(), secretPayload(secret, reveal))
+					return encodeJSON(c.OutOrStdout(), secretPayload(secret, reveal))
 				}
 				writeSecret(c.OutOrStdout(), secret, reveal)
 				return nil
