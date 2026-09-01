@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/backstage"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 )
 
 // Deps holds everything the command tree reaches the outside world through.

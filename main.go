@@ -1,7 +1,7 @@
-// Command gh-cli-extension is a GitHub CLI extension.
+// Command gh-xeb is a GitHub CLI extension.
 //
-// It is installed with `gh extension install 0xHackerSpace/gh-cli-extension`
-// and invoked as `gh cli-extension <subcommand>`.
+// It is installed with `gh extension install 0xHackerSpace/gh-xeb`
+// and invoked as `gh xeb <subcommand>`.
 package main
 
 import (
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/0xHackerSpace/gh-cli-extension/cmd"
+	"github.com/0xHackerSpace/gh-xeb/cmd"
 )
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 		// Cobra already printed usage errors; only surface runtime failures.
 		var silent cmd.SilentError
 		if !errors.As(err, &silent) {
-			fmt.Fprintf(os.Stderr, "gh cli-extension: %v\n", err)
+			fmt.Fprintf(os.Stderr, "gh xeb: %v\n", err)
 		}
 		os.Exit(1)
 	}

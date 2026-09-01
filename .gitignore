@@ -1,6 +1,6 @@
 # Compiled extension binary (built at the repo root, named after the repo)
-/gh-cli-extension
-/gh-cli-extension.exe
+/gh-xeb
+/gh-xeb.exe
 
 # Cross-compiled release artifacts
 /dist/
@@ -19,3 +19,7 @@ coverage.html
 
 # Local, machine-specific agent settings
 .claude/settings.local.json
+
+.notes
+
+use-case/*

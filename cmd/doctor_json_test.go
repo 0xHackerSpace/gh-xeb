@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
 )
 
 // TestDoctorJSONPayload pins the JSON contract. Other tooling consumes this

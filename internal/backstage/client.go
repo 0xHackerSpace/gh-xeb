@@ -161,7 +161,7 @@ func New(cfg Config) (Client, error) {
 		baseURL:   base,
 		token:     firstNonEmpty(cfg.Token, os.Getenv("BACKSTAGE_TOKEN")),
 		http:      httpClient,
-		userAgent: firstNonEmpty(cfg.UserAgent, "gh-cli-extension"),
+		userAgent: firstNonEmpty(cfg.UserAgent, "gh-xeb"),
 	}, nil
 }
 

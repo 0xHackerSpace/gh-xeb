@@ -1,5 +1,5 @@
 ---
-description: Scaffold a new gh cli-extension subcommand end to end
+description: Scaffold a new gh xeb subcommand end to end
 argument-hint: <subcommand-name> [one-line description]
 ---
 

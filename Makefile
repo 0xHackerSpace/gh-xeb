@@ -1,6 +1,6 @@
-BINARY  := gh-cli-extension
+BINARY  := gh-xeb
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/0xHackerSpace/gh-cli-extension/cmd.version=$(VERSION)
+LDFLAGS := -s -w -X github.com/0xHackerSpace/gh-xeb/cmd.version=$(VERSION)
 
 .DEFAULT_GOAL := check
 
@@ -38,7 +38,7 @@ check: lint test
 ## install: build and install this working copy as a local gh extension
 .PHONY: install
 install: build
-	gh extension install . || gh extension upgrade cli-extension
+	gh extension install . || gh extension upgrade xeb
 
 ## clean: remove build artifacts
 .PHONY: clean

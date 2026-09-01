@@ -8,7 +8,7 @@ import (
 )
 
 // version is overridden at release time via
-// -ldflags="-X github.com/0xHackerSpace/gh-cli-extension/cmd.version=v1.2.3".
+// -ldflags="-X github.com/0xHackerSpace/gh-xeb/cmd.version=v1.2.3".
 var version = ""
 
 func resolveVersion() string {

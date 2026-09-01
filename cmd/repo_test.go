@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
 )
 
 func TestRepoPrintsHostAndSlug(t *testing.T) {
@@ -14,7 +14,7 @@ func TestRepoPrintsHostAndSlug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repo returned error: %v", err)
 	}
-	if want := "github.com/0xHackerSpace/gh-cli-extension\n"; out != want {
+	if want := "github.com/0xHackerSpace/gh-xeb\n"; out != want {
 		t.Errorf("got %q, want %q", out, want)
 	}
 }

@@ -13,7 +13,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0004](adr/0004-error-handling-and-output.md) | Commands return errors and write to cobra's streams | 2026-08-28 | Accepted |
 | [0005](adr/0005-agents-md-single-source.md) | `AGENTS.md` is the single source of truth for AI assistants | 2026-08-28 | Accepted |
 | [0006](adr/0006-release-via-gh-extension-precompile.md) | Release with `cli/gh-extension-precompile` and an explicit build script | 2026-08-28 | Accepted |
-| [0007](adr/0007-command-name-from-repo-name.md) | Accept `gh cli-extension` as the command name | 2026-08-28 | Accepted |
+| [0007](adr/0007-command-name-from-repo-name.md) | Accept `gh xeb` as the command name | 2026-08-28 | Accepted |
 | [0008](adr/0008-go-version-pinned-in-go-mod.md) | Pin the Go toolchain in `go.mod` and let `GOTOOLCHAIN` fetch it | 2026-08-28 | Accepted |
 | [0009](adr/0009-inject-dependencies.md) | Inject dependencies through a `Deps` struct | 2026-08-28 | Accepted |
 | [0010](adr/0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | 2026-08-28 | Accepted (applied by 0014) |
@@ -27,6 +27,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0018](adr/0018-backstage-config-from-vault.md) | `backstage` can take its address and token from a Vault secret | 2026-09-01 | Accepted |
 | [0019](adr/0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | 2026-09-01 | Accepted (extended by 0020) |
 | [0020](adr/0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | 2026-09-01 | Accepted |
+| [0021](adr/0021-rename-to-xeb.md) | Rename the extension to `gh xeb` | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -69,7 +70,7 @@ doing unprompted.
 A single dependency PR per week rather than one per module.
 
 **2026-08-28 — Installed locally as a symlink** (`gh extension install .`)
-rather than from a release. `~/.local/share/gh/extensions/gh-cli-extension`
+rather than from a release. `~/.local/share/gh/extensions/gh-xeb`
 points at the checkout, so `make build` alone updates the installed extension.
 
 **2026-08-28 — The `doctor` report layout is pinned by a golden test.**
@@ -143,14 +144,17 @@ event from `/tasks/{id}/events`. Found by probing a live instance.
 as `github.com?owner=acme&repo=payments`. Every first attempt at
 `backstage create` gets this wrong, so it is in the help text and the README.
 
+**2026-09-01 — The ADRs keep saying `cli-extension` after the rename.** They
+are historical records; an ADR written in August describing what the command
+was then is not wrong. Only ADR-0007's status line changed
+([ADR-0021](adr/0021-rename-to-xeb.md)). A grep for the old name now hits
+`docs/adr/` and nothing else, which is the right answer to "what was this
+called before?"
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
 now.
-
-**Rename the repository?** `gh cli-extension` is redundant. Renaming is cheap
-today and expensive after the first published release — see
-[ADR-0007](adr/0007-command-name-from-repo-name.md).
 
 **Add a licence.** The repository has none, which by default means nobody may
 use, copy, or distribute it. Any public extension needs one before its first

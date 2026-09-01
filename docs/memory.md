@@ -12,7 +12,7 @@ Last updated: 2026-09-01.
 
 ## What this is, and what it is for
 
-`0xHackerSpace/gh-cli-extension` is a **playground for exploring the GitHub CLI
+`0xHackerSpace/gh-xeb` is a **playground for exploring the GitHub CLI
 extension API**, not a tool with a user problem to solve. The original README
 said so plainly: "a repo para explorar o desenvolvimento de extensões para a gh
 cli".
@@ -45,7 +45,13 @@ Scaffolding is complete and verified end to end:
   **none of them has ever run** — nothing has been pushed. First push is the
   first real test of the workflows.
 - The extension is installed locally and working:
-  `gh cli-extension whoami` → `You are @IanOliv (Ian Gabriel Oliveira de Sousa).`
+  `gh xeb whoami` → `You are @IanOliv (Ian Gabriel Oliveira de Sousa).`
+- **Renamed from `gh-cli-extension` to `gh-xeb` on 2026-09-01**
+  ([ADR-0021](adr/0021-rename-to-xeb.md)). Two steps are still outstanding and
+  cannot be done from here: renaming the repository on GitHub, and pointing
+  `origin` at the new name. Until then `gh xeb repo` reports the old path,
+  because it reads the git remote. The ADRs deliberately still say
+  `cli-extension` — they are historical records.
 - Work is committed on the `feat/extension-scaffold-and-doctor` branch, over
   the single `61c0a27 Initial commit` on `main`. **Nothing has been pushed**,
   so no workflow has ever run and there is no PR.
@@ -146,9 +152,9 @@ worth knowing before debugging something that is not actually broken.
   subcommands (`gh extension create --precompiled=go`, for instance) may be
   missing. `gh extension install .` does work. Worth upgrading.
 - The extension is installed as a **symlink to the checkout**, not a copy:
-  `~/.local/share/gh/extensions/gh-cli-extension` → the repo directory. So
+  `~/.local/share/gh/extensions/gh-xeb` → the repo directory. So
   `make build` updates the installed extension, and **`make clean` breaks
-  `gh cli-extension` until the next build** (it deletes the binary `gh`
+  `gh xeb` until the next build** (it deletes the binary `gh`
   executes).
 
 ## Gotchas found the hard way

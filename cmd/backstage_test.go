@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/backstage"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 )
 
 func component(name, kind, specType, lifecycle, owner string) backstage.Entity {
@@ -463,7 +463,7 @@ func TestBackstageGetNotFound(t *testing.T) {
 
 func TestBackstageRepo(t *testing.T) {
 	fake := &fakeBackstage{
-		entities: []backstage.Entity{component("gh-cli-extension", "Component", "tool", "experimental", "team")},
+		entities: []backstage.Entity{component("gh-xeb", "Component", "tool", "experimental", "team")},
 	}
 
 	out, err := runRoot(t, backstageDeps(fake), "backstage", "repo")
@@ -471,16 +471,16 @@ func TestBackstageRepo(t *testing.T) {
 		t.Fatalf("backstage repo: %v", err)
 	}
 
-	if !strings.Contains(out, "0xHackerSpace/gh-cli-extension") {
+	if !strings.Contains(out, "0xHackerSpace/gh-xeb") {
 		t.Errorf("output does not name the repository:\n%s", out)
 	}
-	if !strings.Contains(out, "component:default/gh-cli-extension") {
+	if !strings.Contains(out, "component:default/gh-xeb") {
 		t.Errorf("output:\n%s", out)
 	}
 
 	filter := filterOf(t, fake, 0)
 	values := filter["metadata.annotations."+projectSlugAnnotation]
-	if len(values) != 1 || values[0] != "0xHackerSpace/gh-cli-extension" {
+	if len(values) != 1 || values[0] != "0xHackerSpace/gh-xeb" {
 		t.Errorf("filter = %v", filter)
 	}
 }
@@ -521,7 +521,7 @@ func TestBackstageRepoJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("decoding %q: %v", out, err)
 	}
-	if payload.Repository != "0xHackerSpace/gh-cli-extension" || payload.Count != 0 {
+	if payload.Repository != "0xHackerSpace/gh-xeb" || payload.Count != 0 {
 		t.Fatalf("payload = %+v", payload)
 	}
 	if !strings.Contains(out, `"items": []`) {

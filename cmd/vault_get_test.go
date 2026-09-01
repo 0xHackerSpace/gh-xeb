@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 )
 
 func vaultWithSecret() fakeVault {

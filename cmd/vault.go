@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 	"github.com/spf13/cobra"
 )
 
@@ -280,7 +280,7 @@ when it authorises a request.
 
 The path is the API path, so a KV v2 secret at 'prod/db' under the mount 'kv/'
 is 'kv/data/prod/db'.`,
-		Example: "  gh cli-extension vault can kv/data/prod/db",
+		Example: "  gh xeb vault can kv/data/prod/db",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			path := args[0]
@@ -387,9 +387,9 @@ is accepted too.
 
 With --json the values are masked unless --reveal is given, and the payload
 says which it was.`,
-		Example: `  gh cli-extension vault get secret/prod/db
-  gh cli-extension vault get secret/prod/db --reveal
-  gh cli-extension vault get secret/prod/db --field password | pbcopy`,
+		Example: `  gh xeb vault get secret/prod/db
+  gh xeb vault get secret/prod/db --reveal
+  gh xeb vault get secret/prod/db --field password | pbcopy`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			if field != "" && reveal {

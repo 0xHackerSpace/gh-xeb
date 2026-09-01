@@ -17,9 +17,9 @@ func (e SilentError) Unwrap() error { return e.Err }
 // of the process streams.
 func NewRootCmd(deps Deps) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "cli-extension <command>",
+		Use:   "xeb <command>",
 		Short: "Playground extension for exploring the gh CLI extension API",
-		Long: `cli-extension is a GitHub CLI extension used to explore what
+		Long: `xeb is a GitHub CLI extension used to explore what
 extensions can do: talking to the REST and GraphQL APIs through go-gh,
 resolving the current repository, and shelling out to gh itself.`,
 		SilenceUsage:  true,

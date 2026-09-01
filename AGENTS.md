@@ -16,18 +16,18 @@ change.
 A GitHub CLI extension written in Go. It is installed with:
 
 ```
-gh extension install 0xHackerSpace/gh-cli-extension
+gh extension install 0xHackerSpace/gh-xeb
 ```
 
-and invoked as `gh cli-extension <subcommand>`.
+and invoked as `gh xeb <subcommand>`.
 
 Two naming rules come from the `gh` CLI itself and must not be changed casually:
 
-- The repository name must start with `gh-`. Ours is `gh-cli-extension`, so the
-  extension's invocation name is everything after the prefix: `cli-extension`.
-- The built binary at the repo root must be named exactly `gh-cli-extension`,
+- The repository name must start with `gh-`. Ours is `gh-xeb`, so the
+  extension's invocation name is everything after the prefix: `xeb`.
+- The built binary at the repo root must be named exactly `gh-xeb`,
   and release assets must be named
-  `gh-cli-extension-<goos>-<goarch>[.exe]`. `gh extension install` looks the
+  `gh-xeb-<goos>-<goarch>[.exe]`. `gh extension install` looks the
   binaries up by that convention; a rename breaks installation silently.
 
 ## Layout

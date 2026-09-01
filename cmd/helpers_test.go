@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/backstage"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 )
 
 // fakeREST serves canned JSON per path. Anything not in bodies is an error, so
@@ -63,7 +63,7 @@ func testDeps() Deps {
 			return gh.Auth{Host: "github.com", Source: "keyring", HasToken: true}
 		},
 		CurrentRepo: func() (gh.Repo, error) {
-			return gh.Repo{Host: "github.com", Owner: "0xHackerSpace", Name: "gh-cli-extension"}, nil
+			return gh.Repo{Host: "github.com", Owner: "0xHackerSpace", Name: "gh-xeb"}, nil
 		},
 		CLIVersion: func() (string, error) { return "2.4.0", nil },
 		Getenv:     func(string) string { return "" },

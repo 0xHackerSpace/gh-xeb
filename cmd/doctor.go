@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
+	"github.com/0xHackerSpace/gh-xeb/internal/gh"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +32,7 @@ inspected, and only from the environment.
 With --json it emits those attributes as a structured document for other
 tooling to consume. Filter it with jq:
 
-  gh cli-extension doctor --json | jq -r '.identity.teams[] | .org + "/" + .slug'
+  gh xeb doctor --json | jq -r '.identity.teams[] | .org + "/" + .slug'
 
 Exits non-zero if any check fails, in both output modes. Warnings do not
 affect the exit code.`,

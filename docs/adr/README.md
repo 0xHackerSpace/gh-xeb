@@ -32,7 +32,7 @@ invisible in the code.
 | [0004](0004-error-handling-and-output.md) | Commands return errors and write to cobra's streams | Accepted |
 | [0005](0005-agents-md-single-source.md) | `AGENTS.md` is the single source of truth for AI assistants | Accepted |
 | [0006](0006-release-via-gh-extension-precompile.md) | Release with `cli/gh-extension-precompile` and an explicit build script | Accepted |
-| [0007](0007-command-name-from-repo-name.md) | Accept `gh cli-extension` as the command name | Accepted |
+| [0007](0007-command-name-from-repo-name.md) | Accept `gh cli-extension` as the command name | Superseded by 0021 |
 | [0008](0008-go-version-pinned-in-go-mod.md) | Pin the Go toolchain in `go.mod` and let `GOTOOLCHAIN` fetch it | Accepted |
 | [0009](0009-inject-dependencies.md) | Inject dependencies through a `Deps` struct | Accepted |
 | [0010](0010-vault-official-sdk.md) | Use `hashicorp/vault/api` when the extension talks to Vault | Accepted (applied by 0014) |
@@ -46,3 +46,4 @@ invisible in the code.
 | [0018](0018-backstage-config-from-vault.md) | `backstage` can take its address and token from a Vault secret | Accepted |
 | [0019](0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | Accepted (extended by 0020) |
 | [0020](0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | Accepted |
+| [0021](0021-rename-to-xeb.md) | Rename the extension to `gh xeb` | Accepted |

@@ -7,8 +7,8 @@ changes; the rules below are the summary Copilot should always apply.
 ## Project
 
 A GitHub CLI extension in Go, installed as
-`gh extension install 0xHackerSpace/gh-cli-extension` and run as
-`gh cli-extension <subcommand>`. Built on [cobra](https://github.com/spf13/cobra)
+`gh extension install 0xHackerSpace/gh-xeb` and run as
+`gh xeb <subcommand>`. Built on [cobra](https://github.com/spf13/cobra)
 and [go-gh](https://github.com/cli/go-gh).
 
 ## Always
@@ -27,7 +27,7 @@ and [go-gh](https://github.com/cli/go-gh).
 ## Never
 
 - Never rename the binary or the release artifacts: `gh extension install`
-  requires `gh-cli-extension` and `gh-cli-extension-<goos>-<goarch>[.exe]`.
+  requires `gh-xeb` and `gh-xeb-<goos>-<goarch>[.exe]`.
 - Never add interactive prompts; extensions run in pipes and CI.
 - Never introduce a dependency without a clear need — this extension should stay
   installable as a single static binary (`CGO_ENABLED=0`).

@@ -6,8 +6,8 @@
 set -euo pipefail
 
 TAG="${1:-dev}"
-BINARY="gh-cli-extension"
-LDFLAGS="-s -w -X github.com/0xHackerSpace/gh-cli-extension/cmd.version=${TAG}"
+BINARY="gh-xeb"
+LDFLAGS="-s -w -X github.com/0xHackerSpace/gh-xeb/cmd.version=${TAG}"
 
 PLATFORMS=(
   "darwin/amd64"

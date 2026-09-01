@@ -1,4 +1,4 @@
-module github.com/0xHackerSpace/gh-cli-extension
+module github.com/0xHackerSpace/gh-xeb
 
 go 1.25.0
 

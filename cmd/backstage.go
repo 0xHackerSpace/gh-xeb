@@ -11,8 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
-	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
+	"github.com/0xHackerSpace/gh-xeb/internal/backstage"
+	"github.com/0xHackerSpace/gh-xeb/internal/vault"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +51,7 @@ Catalogs that allow anonymous reads work with no token at all.
 --vault-secret takes both out of your environment entirely, reading them from a
 Vault KV secret instead:
 
-  gh cli-extension backstage --vault-secret secret/backstage
+  gh xeb backstage --vault-secret secret/backstage
 
 That secret should carry a 'url' field, a 'token' field, or both ('base_url'
 and 'api_token' are accepted too). Vault is reached exactly as the vault
@@ -290,9 +290,9 @@ A bare key with no '=' matches entities where that field merely exists.
 
 Results are one page of --limit entities. Pass --all to follow the catalog's
 pagination to the end, which on a large instance is many requests.`,
-		Example: `  gh cli-extension backstage entities --kind component --type service
-  gh cli-extension backstage entities --owner group:default/platform --all
-  gh cli-extension backstage entities --search payments --json`,
+		Example: `  gh xeb backstage entities --kind component --type service
+  gh xeb backstage entities --owner group:default/platform --all
+  gh xeb backstage entities --search payments --json`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			filter := backstage.Filter{}
@@ -435,8 +435,8 @@ first and then alphabetical. The catalog's own ordering within a page is not
 recoverable -- a JSON object has no order once decoded.
 
 Use --json for the full structure.`,
-		Example: `  gh cli-extension backstage ofertas
-  gh cli-extension backstage ofertas --json`,
+		Example: `  gh xeb backstage ofertas
+  gh xeb backstage ofertas --json`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			query := backstage.EntityQuery{
@@ -640,8 +640,8 @@ repository. Use 'backstage ofertas' to see what each one asks for.
 
 The template is named the short way or in full:
 
-  gh cli-extension backstage create terraform-module --field name=s3-bucket
-  gh cli-extension backstage create template:default/terraform-module ...
+  gh xeb backstage create terraform-module --field name=s3-bucket
+  gh xeb backstage create template:default/terraform-module ...
 
 Values are given one --field at a time. They are checked against the
 template's own schema before anything is submitted, so a misspelled parameter
@@ -661,9 +661,9 @@ values and prints what would be sent, without sending it.
 
 By default the run is followed until it finishes and its log is printed.
 --no-wait submits and returns the task id instead.`,
-		Example: `  gh cli-extension backstage create techdocs-site --field name=runbooks --dry-run
-  gh cli-extension backstage create terraform-module --field name=s3-bucket --field owner=group:default/guests --field provider=aws
-  gh cli-extension backstage create svc --field 'repoUrl=github.com?owner=acme&repo=payments' --no-wait`,
+		Example: `  gh xeb backstage create techdocs-site --field name=runbooks --dry-run
+  gh xeb backstage create terraform-module --field name=s3-bucket --field owner=group:default/guests --field provider=aws
+  gh xeb backstage create svc --field 'repoUrl=github.com?owner=acme&repo=payments' --no-wait`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			ref, err := backstage.ParseEntityRef(args[0], "template")
@@ -993,8 +993,8 @@ A reference is [<kind>:][<namespace>/]<name>, and the namespace defaults to
   payments --kind component
 
 Use --kind when you would rather not type the prefix.`,
-		Example: `  gh cli-extension backstage get component:payments
-  gh cli-extension backstage get group:platform/team-a --json`,
+		Example: `  gh xeb backstage get component:payments
+  gh xeb backstage get group:platform/team-a --json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			ref, err := backstage.ParseEntityRef(args[0], kind)

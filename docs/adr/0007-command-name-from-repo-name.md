@@ -1,6 +1,6 @@
 # ADR-0007: Accept `gh cli-extension` as the command name
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0021](0021-rename-to-xeb.md)
 - **Date:** 2026-08-28
 - **Deciders:** @IanOliv
 

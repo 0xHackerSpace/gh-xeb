@@ -39,8 +39,8 @@ func TestDescribeSource(t *testing.T) {
 }
 
 func TestRepoString(t *testing.T) {
-	r := Repo{Host: "github.com", Owner: "0xHackerSpace", Name: "gh-cli-extension"}
-	if got, want := r.String(), "0xHackerSpace/gh-cli-extension"; got != want {
+	r := Repo{Host: "github.com", Owner: "0xHackerSpace", Name: "gh-xeb"}
+	if got, want := r.String(), "0xHackerSpace/gh-xeb"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

@@ -1,15 +1,15 @@
-# gh-cli-extension
+# gh-xeb
 
 A [GitHub CLI](https://cli.github.com) extension, written in Go, used as a
 playground for exploring what `gh` extensions can do.
 
 The repository name has to start with `gh-`, so the extension is invoked as
-`gh cli-extension`.
+`gh xeb`.
 
 ## Install
 
 ```sh
-gh extension install 0xHackerSpace/gh-cli-extension
+gh extension install 0xHackerSpace/gh-xeb
 ```
 
 Or from a local checkout:
@@ -21,7 +21,7 @@ make install
 ## Usage
 
 ```sh
-gh cli-extension <command>
+gh xeb <command>
 ```
 
 | Command | Description |
@@ -38,7 +38,7 @@ gh cli-extension <command>
 Answers "what can I actually get at?" for the Vault token you are using.
 
 ```
-$ gh cli-extension vault
+$ gh xeb vault
 Vault  https://vault.example.com:8200
        v1.17.2, unsealed (vault-prod)
 
@@ -57,13 +57,13 @@ Mounts (3 visible)
 Three subcommands drill in, and every one accepts `--json`:
 
 ```sh
-gh cli-extension vault token              # policies and lifetime
-gh cli-extension vault mounts             # visible secret engines
-gh cli-extension vault can kv/data/prod/db  # capabilities at one path
+gh xeb vault token              # policies and lifetime
+gh xeb vault mounts             # visible secret engines
+gh xeb vault can kv/data/prod/db  # capabilities at one path
 ```
 
 ```
-$ gh cli-extension vault can kv/data/prod/api
+$ gh xeb vault can kv/data/prod/api
 kv/data/prod/api
   create   no
   read     no
@@ -114,7 +114,7 @@ owns it, what it depends on, and which entity describes the repository you are
 standing in.
 
 ```
-$ gh cli-extension backstage
+$ gh xeb backstage
 Backstage  https://backstage.acme.dev
 
 Catalog (434 entities)
@@ -130,7 +130,7 @@ Catalog (434 entities)
 flags mean *and*.
 
 ```
-$ gh cli-extension backstage entities --kind component --limit 4
+$ gh xeb backstage entities --kind component --limit 4
 component:default/payments       service   production     group:default/payments
 component:default/payments-web   website   production     group:default/payments
 component:default/ledger         service   experimental   group:default/platform
@@ -143,8 +143,8 @@ Showing 4 of 41; --all for the rest
 A bare key with no `=` matches entities where the field merely exists.
 
 ```sh
-gh cli-extension backstage entities --filter 'relations.ownedBy=group:default/platform'
-gh cli-extension backstage entities --filter 'metadata.annotations.backstage.io/techdocs-ref'
+gh xeb backstage entities --filter 'relations.ownedBy=group:default/platform'
+gh xeb backstage entities --filter 'metadata.annotations.backstage.io/techdocs-ref'
 ```
 
 `ofertas` answers a different question: not "what is in the catalog" but "what
@@ -153,7 +153,7 @@ can I ask the portal to create, and what will it need from me?" It lists every
 `spec.parameters`.
 
 ```
-$ gh cli-extension backstage ofertas
+$ gh xeb backstage ofertas
 node-typescript-api  Node.js + TypeScript API
   Serviço HTTP em Node.js com TypeScript e Express, já com testes (vitest), lint, Dockerfile multi-stage, GitHub Actions e TechDocs.
 
@@ -217,24 +217,24 @@ repository and registers it in the catalog, and interrupting the command does
 not undo any of it.
 
 ```sh
-gh cli-extension backstage create terraform-module   --field name=s3-bucket   --field owner=group:default/guests   --field provider=aws   --field 'repoUrl=github.com?owner=acme&repo=terraform-s3-bucket'
+gh xeb backstage create terraform-module   --field name=s3-bucket   --field owner=group:default/guests   --field provider=aws   --field 'repoUrl=github.com?owner=acme&repo=terraform-s3-bucket'
 ```
 
 Every value is checked against the template's own schema **before** anything is
 sent, so a mistake costs you nothing:
 
 ```
-$ gh cli-extension backstage create terraform-module --field nome=x
-gh cli-extension: terraform-module has no parameter "nome" (it takes: description, name, owner, provider, repoUrl, system, terraformVersion)
+$ gh xeb backstage create terraform-module --field nome=x
+gh xeb: terraform-module has no parameter "nome" (it takes: description, name, owner, provider, repoUrl, system, terraformVersion)
 
-$ gh cli-extension backstage create terraform-module --field name=x
-gh cli-extension: terraform-module requires "owner", "provider", "repoUrl"
+$ gh xeb backstage create terraform-module --field name=x
+gh xeb: terraform-module requires "owner", "provider", "repoUrl"
 ```
 
 `--dry-run` goes one step further and shows exactly what would be submitted:
 
 ```
-$ gh cli-extension backstage create terraform-module --field ... --dry-run
+$ gh xeb backstage create terraform-module --field ... --dry-run
 template:default/terraform-module
 
 Would submit:
@@ -275,7 +275,7 @@ the command line ([ADR-0020](docs/adr/0020-backstage-create.md)).
 to `default`.
 
 ```
-$ gh cli-extension backstage get component:payments
+$ gh xeb backstage get component:payments
 component:default/payments  Payments API
 
   kind          Component
@@ -301,10 +301,10 @@ Relations
 entities annotated with it:
 
 ```
-$ gh cli-extension backstage repo
-0xHackerSpace/gh-cli-extension
+$ gh xeb backstage repo
+0xHackerSpace/gh-xeb
 
-component:default/gh-cli-extension   tool   experimental   group:default/platform
+component:default/gh-xeb   tool   experimental   group:default/platform
 ```
 
 The link is the `github.com/project-slug` annotation, which Backstage's GitHub
@@ -314,10 +314,10 @@ repository — the command says so rather than claiming the repository is
 unregistered:
 
 ```
-$ gh cli-extension backstage repo
-0xHackerSpace/gh-cli-extension
+$ gh xeb backstage repo
+0xHackerSpace/gh-xeb
 
-Not in the catalog: no entity is annotated github.com/project-slug=0xHackerSpace/gh-cli-extension
+Not in the catalog: no entity is annotated github.com/project-slug=0xHackerSpace/gh-xeb
 ```
 
 #### Configuration and authentication
@@ -337,7 +337,7 @@ request. A bare host is assumed to be `https`.
 instead, so neither has to live in your shell:
 
 ```sh
-gh cli-extension backstage --vault-secret secret/backstage
+gh xeb backstage --vault-secret secret/backstage
 ```
 
 The secret should carry a `url` field, a `token` field, or both — `base_url`
@@ -371,7 +371,7 @@ argument is visible in your shell history and in `ps` to every other user on
 the machine. For a one-off, prefix the invocation instead:
 
 ```sh
-BACKSTAGE_TOKEN=... gh cli-extension backstage repo
+BACKSTAGE_TOKEN=... gh xeb backstage repo
 ```
 
 Every subcommand is read-only. Entities are not created through this API —
@@ -386,7 +386,7 @@ the token carries the `read:org` scope and the user is in a mapped org and team
 — none of which is visible until a login fails. `doctor` reports all of it:
 
 ```
-$ gh cli-extension doctor
+$ gh xeb doctor
 GitHub
   ok   gh CLI            2.4.0
   ok   authentication    github.com (keyring)
@@ -417,10 +417,10 @@ the rendered report:
 
 ```sh
 # every team, as Vault's GitHub auth method sees them
-gh cli-extension doctor --json | jq -r '.identity.teams[] | .org + "/" + .slug'
+gh xeb doctor --json | jq -r '.identity.teams[] | .org + "/" + .slug'
 
 # gate a script on the scope Vault needs
-gh cli-extension doctor --json | jq -e '.vault.readOrgScope' >/dev/null
+gh xeb doctor --json | jq -e '.vault.readOrgScope' >/dev/null
 ```
 
 ```json
@@ -460,7 +460,7 @@ Requires the Go toolchain pinned in `go.mod` (Go 1.25). With the default
 build.
 
 ```sh
-make build   # compile ./gh-cli-extension
+make build   # compile ./gh-xeb
 make test    # go test ./...
 make lint    # gofmt check + go vet
 make check   # lint + test — the same gate CI runs
@@ -498,7 +498,7 @@ To make the extension discoverable, add the `gh-extension` topic to the
 repository:
 
 ```sh
-gh repo edit 0xHackerSpace/gh-cli-extension --add-topic gh-extension
+gh repo edit 0xHackerSpace/gh-xeb --add-topic gh-extension
 ```
 
 ## Documentation
