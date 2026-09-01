@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/gh"
+	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
 )
 
 func component(name, kind, specType, lifecycle, owner string) backstage.Entity {
@@ -542,5 +544,446 @@ func TestBackstageCatalogErrorsSurface(t *testing.T) {
 		if _, err := runRoot(t, deps, args...); !errors.Is(err, boom) {
 			t.Errorf("%v: error = %v, want the catalog failure", args, err)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Configuration from Vault
+// ---------------------------------------------------------------------------
+
+// vaultBackedDeps wires a Backstage fake plus a Vault fake holding one secret,
+// and records the Config the Backstage constructor was handed.
+func vaultBackedDeps(secrets map[string]vault.Secret, got *backstage.Config) Deps {
+	deps := testDeps()
+	deps.NewVaultClient = func(context.Context, vault.Options) (vault.Client, error) {
+		return fakeVault{secrets: secrets}, nil
+	}
+	deps.NewBackstageClient = func(cfg backstage.Config) (backstage.Client, error) {
+		*got = cfg
+		return &fakeBackstage{}, nil
+	}
+	return deps
+}
+
+func kvSecret(path string, fields map[string]string) map[string]vault.Secret {
+	return map[string]vault.Secret{path: {Path: path, Mount: "secret/", MountType: "kv-v2", Data: fields}}
+}
+
+func TestBackstageReadsURLAndTokenFromVault(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"url":   "https://backstage.acme.dev",
+		"token": "vault-issued",
+	}), &got)
+
+	if _, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/backstage"); err != nil {
+		t.Fatalf("backstage --vault-secret: %v", err)
+	}
+	if got.BaseURL != "https://backstage.acme.dev" || got.Token != "vault-issued" {
+		t.Fatalf("config = %+v", got)
+	}
+}
+
+func TestBackstageAcceptsTheAliasFields(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"base_url":  "https://alias.example.com",
+		"api_token": "alias-token",
+	}), &got)
+
+	if _, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/backstage"); err != nil {
+		t.Fatalf("backstage --vault-secret: %v", err)
+	}
+	if got.BaseURL != "https://alias.example.com" || got.Token != "alias-token" {
+		t.Fatalf("config = %+v", got)
+	}
+}
+
+func TestBackstageURLFlagBeatsTheVaultSecret(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"url":   "https://from-vault.example.com",
+		"token": "vault-issued",
+	}), &got)
+
+	_, err := runRoot(t, deps, "backstage",
+		"--vault-secret", "secret/backstage", "--url", "https://from-flag.example.com")
+	if err != nil {
+		t.Fatalf("backstage: %v", err)
+	}
+	if got.BaseURL != "https://from-flag.example.com" {
+		t.Errorf("BaseURL = %q, want the flag to win", got.BaseURL)
+	}
+	// The URL being overridden must not cost the token.
+	if got.Token != "vault-issued" {
+		t.Errorf("Token = %q, want the one from Vault", got.Token)
+	}
+}
+
+func TestBackstageVaultSecretWithOnlyAToken(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"token": "vault-issued",
+	}), &got)
+
+	// No url anywhere: the empty BaseURL falls through to backstage.New, which
+	// reads the environment and is the component that reports it missing.
+	if _, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/backstage"); err != nil {
+		t.Fatalf("backstage: %v", err)
+	}
+	if got.BaseURL != "" || got.Token != "vault-issued" {
+		t.Fatalf("config = %+v", got)
+	}
+}
+
+func TestBackstageVaultSecretPathFromTheEnvironment(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/from-env", map[string]string{
+		"url": "https://from-env-secret.example.com",
+	}), &got)
+	deps.Getenv = func(key string) string {
+		if key == "BACKSTAGE_VAULT_SECRET" {
+			return "secret/from-env"
+		}
+		return ""
+	}
+
+	if _, err := runRoot(t, deps, "backstage"); err != nil {
+		t.Fatalf("backstage: %v", err)
+	}
+	if got.BaseURL != "https://from-env-secret.example.com" {
+		t.Errorf("BaseURL = %q", got.BaseURL)
+	}
+}
+
+func TestBackstageVaultSecretWithNeitherField(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"username": "svc", "password": "hunter2",
+	}), &got)
+
+	_, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/backstage")
+	if err == nil {
+		t.Fatal("want an error for a secret carrying neither field")
+	}
+	// The error must name the fields present so the user can fix the secret...
+	for _, want := range []string{"secret/backstage", `"url"`, `"token"`, "username", "password"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q is missing %q", err, want)
+		}
+	}
+	// ...and must not name their values.
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("error leaked a secret value: %v", err)
+	}
+	if got.BaseURL != "" || got.Token != "" {
+		t.Errorf("the catalog client was built anyway: %+v", got)
+	}
+}
+
+func TestBackstageVaultSecretMissing(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(nil, &got)
+
+	_, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/absent")
+	if err == nil || !strings.Contains(err.Error(), "secret/absent") {
+		t.Fatalf("error = %v, want it to name the missing path", err)
+	}
+}
+
+func TestBackstageWithNoVaultTokenExplainsHow(t *testing.T) {
+	deps := testDeps()
+	deps.NewVaultClient = func(context.Context, vault.Options) (vault.Client, error) {
+		return nil, vault.ErrNoToken
+	}
+
+	_, err := runRoot(t, deps, "backstage", "--vault-secret", "secret/backstage")
+	if !errors.Is(err, vault.ErrNoToken) {
+		t.Fatalf("error = %v, want ErrNoToken", err)
+	}
+	for _, want := range []string{"secret/backstage", "VAULT_TOKEN", "gh auth login"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q is missing %q", err, want)
+		}
+	}
+}
+
+func TestBackstagePassesTheAuthPathToVault(t *testing.T) {
+	var opts vault.Options
+	deps := testDeps()
+	deps.NewVaultClient = func(_ context.Context, o vault.Options) (vault.Client, error) {
+		opts = o
+		return fakeVault{secrets: kvSecret("secret/backstage", map[string]string{"url": "https://x.example.com"})}, nil
+	}
+	deps.NewBackstageClient = func(backstage.Config) (backstage.Client, error) { return &fakeBackstage{}, nil }
+
+	_, err := runRoot(t, deps, "backstage",
+		"--vault-secret", "secret/backstage", "--vault-auth-path", "gh-corp")
+	if err != nil {
+		t.Fatalf("backstage: %v", err)
+	}
+	if opts.AuthPath != "gh-corp" {
+		t.Errorf("AuthPath = %q", opts.AuthPath)
+	}
+	if opts.GitHubToken == nil {
+		t.Error("the Vault login was given no way to fetch a GitHub token")
+	}
+}
+
+func TestBackstageDoesNotTouchVaultWithoutBeingAsked(t *testing.T) {
+	deps := backstageDeps(&fakeBackstage{})
+	deps.NewVaultClient = func(context.Context, vault.Options) (vault.Client, error) {
+		t.Fatal("the backstage command contacted Vault without --vault-secret")
+		return nil, nil
+	}
+
+	for _, args := range [][]string{
+		{"backstage"},
+		{"backstage", "entities"},
+		{"backstage", "get", "component:x"},
+		{"backstage", "repo"},
+	} {
+		if _, err := runRoot(t, deps, args...); err != nil && !errors.Is(err, backstage.ErrNotFound) {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// backstage ofertas
+// ---------------------------------------------------------------------------
+
+// terraformTemplate mirrors the shape a real scaffolder template has: several
+// form pages, each with its own properties and required list, and parameters
+// that carry only a title rather than a description.
+func terraformTemplate() backstage.Entity {
+	return backstage.Entity{
+		Kind: "Template",
+		Metadata: backstage.EntityMetadata{
+			Name: "terraform-module", Namespace: "default", Title: "Módulo Terraform",
+			Description: "Módulo Terraform reutilizável\ncom exemplo executável.\n",
+		},
+		Spec: map[string]interface{}{
+			"type": "infrastructure",
+			"parameters": []interface{}{
+				map[string]interface{}{
+					"title": "Identificação",
+					"properties": map[string]interface{}{
+						"name":        map[string]interface{}{"title": "Nome do módulo", "description": "Sem o prefixo terraform-"},
+						"owner":       map[string]interface{}{"title": "Owner"},
+						"description": map[string]interface{}{"description": "O que provisiona"},
+					},
+					"required": []interface{}{"name", "owner"},
+				},
+				map[string]interface{}{
+					"title": "Provider",
+					"properties": map[string]interface{}{
+						"provider":         map[string]interface{}{"title": "Provider principal"},
+						"terraformVersion": map[string]interface{}{"title": "Versão mínima"},
+					},
+					"required": []interface{}{"provider"},
+				},
+			},
+		},
+	}
+}
+
+func TestBackstageOfertasJSON(t *testing.T) {
+	fake := &fakeBackstage{entities: []backstage.Entity{terraformTemplate()}}
+
+	out, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas", "--json")
+	if err != nil {
+		t.Fatalf("backstage ofertas --json: %v", err)
+	}
+
+	var payload struct {
+		Count     int `json:"count"`
+		Templates []struct {
+			Name        string `json:"name"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Fields      []struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Required    bool   `json:"required"`
+			} `json:"fields"`
+		} `json:"templates"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("decoding %q: %v", out, err)
+	}
+
+	if payload.Count != 1 || len(payload.Templates) != 1 {
+		t.Fatalf("payload = %+v", payload)
+	}
+	tpl := payload.Templates[0]
+	if tpl.Name != "terraform-module" || tpl.Title != "Módulo Terraform" {
+		t.Errorf("name/title = %q/%q", tpl.Name, tpl.Title)
+	}
+	if tpl.Description != "Módulo Terraform reutilizável com exemplo executável." {
+		t.Errorf("description = %q, want it flattened onto one line", tpl.Description)
+	}
+
+	// Page order is kept; within a page, required first then alphabetical.
+	want := []struct {
+		name, description string
+		required          bool
+	}{
+		{"name", "Sem o prefixo terraform-", true},
+		{"owner", "Owner", true},
+		{"description", "O que provisiona", false},
+		{"provider", "Provider principal", true},
+		{"terraformVersion", "Versão mínima", false},
+	}
+	if len(tpl.Fields) != len(want) {
+		t.Fatalf("got %d fields, want %d: %+v", len(tpl.Fields), len(want), tpl.Fields)
+	}
+	for i, w := range want {
+		got := tpl.Fields[i]
+		if got.Name != w.name || got.Description != w.description || got.Required != w.required {
+			t.Errorf("field %d = %+v, want %v/%q/%v", i, got, w.name, w.description, w.required)
+		}
+	}
+}
+
+func TestBackstageOfertasAsksOnlyForTemplates(t *testing.T) {
+	fake := &fakeBackstage{}
+
+	if _, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas"); err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+
+	filter := filterOf(t, fake, 0)
+	kinds := filter["kind"]
+	if len(kinds) != 1 || kinds[0] != "template" {
+		t.Errorf("filter = %v, want kind=template only", filter)
+	}
+	if len(filter) != 1 {
+		t.Errorf("filter carries more than the kind: %v", filter)
+	}
+}
+
+func TestBackstageOfertasText(t *testing.T) {
+	fake := &fakeBackstage{entities: []backstage.Entity{terraformTemplate()}}
+
+	out, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas")
+	if err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+
+	for _, want := range []string{
+		"terraform-module", "Módulo Terraform", "Sem o prefixo terraform-",
+		"* name", "* owner", "* provider", "* required",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	// Optional fields carry no marker.
+	if strings.Contains(out, "* terraformVersion") {
+		t.Errorf("an optional field is marked required:\n%s", out)
+	}
+}
+
+func TestBackstageOfertasAcceptsASinglePageObject(t *testing.T) {
+	// A one-page template may store the object directly instead of an array.
+	fake := &fakeBackstage{entities: []backstage.Entity{{
+		Kind:     "Template",
+		Metadata: backstage.EntityMetadata{Name: "simple", Namespace: "default"},
+		Spec: map[string]interface{}{"parameters": map[string]interface{}{
+			"properties": map[string]interface{}{
+				"repoUrl": map[string]interface{}{"title": "Repository"},
+			},
+			"required": []interface{}{"repoUrl"},
+		}},
+	}}}
+
+	out, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas", "--json")
+	if err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+	if !strings.Contains(out, `"repoUrl"`) || !strings.Contains(out, `"required": true`) {
+		t.Errorf("single-page parameters were not read:\n%s", out)
+	}
+}
+
+func TestBackstageOfertasWithNoParameters(t *testing.T) {
+	fake := &fakeBackstage{entities: []backstage.Entity{{
+		Kind:     "Template",
+		Metadata: backstage.EntityMetadata{Name: "bare", Namespace: "default"},
+	}}}
+
+	out, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas", "--json")
+	if err != nil {
+		t.Fatalf("backstage ofertas --json: %v", err)
+	}
+	// Never null: a consumer must be able to iterate fields unconditionally.
+	if !strings.Contains(out, `"fields": []`) {
+		t.Errorf("fields is not an empty array:\n%s", out)
+	}
+
+	out, err = runRoot(t, backstageDeps(fake), "backstage", "ofertas")
+	if err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+	if !strings.Contains(out, "asks for nothing") {
+		t.Errorf("output:\n%s", out)
+	}
+}
+
+func TestBackstageOfertasEmptyCatalog(t *testing.T) {
+	out, err := runRoot(t, backstageDeps(&fakeBackstage{}), "backstage", "ofertas")
+	if err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+	if !strings.Contains(out, "No templates") {
+		t.Errorf("output:\n%s", out)
+	}
+
+	out, err = runRoot(t, backstageDeps(&fakeBackstage{}), "backstage", "ofertas", "--json")
+	if err != nil {
+		t.Fatalf("backstage ofertas --json: %v", err)
+	}
+	if !strings.Contains(out, `"templates": []`) {
+		t.Errorf("empty listing is not an empty array:\n%s", out)
+	}
+}
+
+func TestBackstageOfertasIgnoresAMalformedSchema(t *testing.T) {
+	fake := &fakeBackstage{entities: []backstage.Entity{{
+		Kind:     "Template",
+		Metadata: backstage.EntityMetadata{Name: "odd", Namespace: "default"},
+		Spec: map[string]interface{}{"parameters": []interface{}{
+			"not an object",
+			map[string]interface{}{"properties": "not an object"},
+			map[string]interface{}{
+				"properties": map[string]interface{}{"ok": "not an object"},
+				"required":   "not a list",
+			},
+		}},
+	}}}
+
+	out, err := runRoot(t, backstageDeps(fake), "backstage", "ofertas", "--json")
+	if err != nil {
+		t.Fatalf("backstage ofertas: %v", err)
+	}
+	// The one readable property survives, with an empty description, and
+	// nothing panics on the rest.
+	if !strings.Contains(out, `"name": "ok"`) || !strings.Contains(out, `"required": false`) {
+		t.Errorf("output:\n%s", out)
+	}
+}
+
+func TestBackstageOfertasThroughVault(t *testing.T) {
+	var got backstage.Config
+	deps := vaultBackedDeps(kvSecret("secret/backstage", map[string]string{
+		"url": "https://acme.example.com", "token": "vault-issued",
+	}), &got)
+
+	if _, err := runRoot(t, deps, "backstage", "ofertas", "--vault-secret", "secret/backstage"); err != nil {
+		t.Fatalf("backstage ofertas --vault-secret: %v", err)
+	}
+	if got.BaseURL != "https://acme.example.com" || got.Token != "vault-issued" {
+		t.Fatalf("config = %+v", got)
 	}
 }
