@@ -152,6 +152,21 @@ type fakeBackstage struct {
 	queries []backstage.EntityQuery
 	// refs records every EntityRef looked up.
 	refs []backstage.EntityRef
+
+	// Scaffolder state.
+	scaffolded  []scaffoldCall
+	scaffoldErr error
+	statuses    []string
+	taskCalls   int
+	taskErr     error
+	events      []backstage.TaskEvent
+	eventsErr   error
+}
+
+// scaffoldCall is one submitted run.
+type scaffoldCall struct {
+	Ref    backstage.EntityRef
+	Values map[string]interface{}
 }
 
 func (f *fakeBackstage) BaseURL() string {
@@ -179,6 +194,50 @@ func (f *fakeBackstage) AllEntities(_ context.Context, q backstage.EntityQuery) 
 	f.queries = append(f.queries, q)
 	return f.entities, f.allErr
 }
+
+// scaffolded records the templates submitted and with which values, so a test
+// can assert on the payload without a server. Each Task/TaskEvents pair is
+// served from the scripted state below.
+func (f *fakeBackstage) Scaffold(_ context.Context, ref backstage.EntityRef, values map[string]interface{}) (backstage.Task, error) {
+	f.scaffolded = append(f.scaffolded, scaffoldCall{Ref: ref, Values: values})
+	if f.scaffoldErr != nil {
+		return backstage.Task{}, f.scaffoldErr
+	}
+	return backstage.Task{ID: "task-1", Status: "open", TemplateRef: ref.String(), URL: f.TaskURL("task-1")}, nil
+}
+
+// Task walks f.statuses one entry per call, staying on the last one, so a test
+// can script a run that is open, then processing, then done.
+func (f *fakeBackstage) Task(_ context.Context, id string) (backstage.Task, error) {
+	if f.taskErr != nil {
+		return backstage.Task{}, f.taskErr
+	}
+	status := "completed"
+	if len(f.statuses) > 0 {
+		if f.taskCalls < len(f.statuses) {
+			status = f.statuses[f.taskCalls]
+		} else {
+			status = f.statuses[len(f.statuses)-1]
+		}
+	}
+	f.taskCalls++
+	return backstage.Task{ID: id, Status: status, URL: f.TaskURL(id)}, nil
+}
+
+func (f *fakeBackstage) TaskEvents(_ context.Context, _ string, after int) ([]backstage.TaskEvent, error) {
+	if f.eventsErr != nil {
+		return nil, f.eventsErr
+	}
+	var out []backstage.TaskEvent
+	for _, event := range f.events {
+		if event.ID > after {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeBackstage) TaskURL(id string) string { return f.BaseURL() + "/create/tasks/" + id }
 
 func (f *fakeBackstage) Entity(_ context.Context, ref backstage.EntityRef) (backstage.Entity, error) {
 	f.refs = append(f.refs, ref)

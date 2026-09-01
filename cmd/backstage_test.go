@@ -987,3 +987,320 @@ func TestBackstageOfertasThroughVault(t *testing.T) {
 		t.Fatalf("config = %+v", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// backstage create
+// ---------------------------------------------------------------------------
+
+// typedTemplate declares a parameter of each type create has to convert.
+func typedTemplate() backstage.Entity {
+	return backstage.Entity{
+		Kind:     "Template",
+		Metadata: backstage.EntityMetadata{Name: "svc", Namespace: "default"},
+		Spec: map[string]interface{}{
+			"parameters": []interface{}{map[string]interface{}{
+				"properties": map[string]interface{}{
+					"name":        map[string]interface{}{"type": "string", "title": "Name"},
+					"port":        map[string]interface{}{"type": "integer", "title": "Port"},
+					"ratio":       map[string]interface{}{"type": "number", "title": "Ratio"},
+					"includeAdr":  map[string]interface{}{"type": "boolean", "title": "ADR"},
+					"tags":        map[string]interface{}{"type": "array", "title": "Tags"},
+					"untypedNote": map[string]interface{}{"title": "Note"},
+				},
+				"required": []interface{}{"name"},
+			}},
+		},
+	}
+}
+
+func createDeps(t *testing.T, template backstage.Entity, fake *fakeBackstage) Deps {
+	t.Helper()
+	fake.byRef = map[string]backstage.Entity{template.Ref().String(): template}
+	return backstageDeps(fake)
+}
+
+func TestBackstageCreateSubmitsCoercedValues(t *testing.T) {
+	fake := &fakeBackstage{statuses: []string{"completed"}}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	_, err := runRoot(t, deps, "backstage", "create", "svc",
+		"--field", "name=payments",
+		"--field", "port=8080",
+		"--field", "ratio=0.5",
+		"--field", "includeAdr=true",
+		"--field", "untypedNote=whatever")
+	if err != nil {
+		t.Fatalf("backstage create: %v", err)
+	}
+
+	if len(fake.scaffolded) != 1 {
+		t.Fatalf("submitted %d runs, want 1", len(fake.scaffolded))
+	}
+	call := fake.scaffolded[0]
+	if call.Ref.String() != "template:default/svc" {
+		t.Errorf("ref = %s", call.Ref)
+	}
+	// Each value arrives as the type the schema declares, not as a string.
+	want := map[string]interface{}{
+		"name": "payments", "port": int64(8080), "ratio": 0.5,
+		"includeAdr": true, "untypedNote": "whatever",
+	}
+	for name, expected := range want {
+		if got := call.Values[name]; got != expected {
+			t.Errorf("values[%q] = %#v, want %#v", name, got, expected)
+		}
+	}
+}
+
+func TestBackstageCreateRejectsAnUnknownField(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	_, err := runRoot(t, deps, "backstage", "create", "svc",
+		"--field", "name=x", "--field", "prot=8080")
+	if err == nil {
+		t.Fatal("want an error for a misspelled parameter")
+	}
+	if !strings.Contains(err.Error(), `"prot"`) || !strings.Contains(err.Error(), "port") {
+		t.Errorf("error does not name the typo and the real parameters: %v", err)
+	}
+	if len(fake.scaffolded) != 0 {
+		t.Error("the run was submitted despite the bad field")
+	}
+}
+
+func TestBackstageCreateRejectsAMissingRequiredField(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	_, err := runRoot(t, deps, "backstage", "create", "svc", "--field", "port=1")
+	if err == nil || !strings.Contains(err.Error(), `"name"`) {
+		t.Fatalf("error = %v, want it to name the missing field", err)
+	}
+	if len(fake.scaffolded) != 0 {
+		t.Error("the run was submitted with a required field missing")
+	}
+}
+
+func TestBackstageCreateRejectsBadTypesAndShapes(t *testing.T) {
+	cases := []struct {
+		name  string
+		field string
+		want  string
+	}{
+		{"boolean", "includeAdr=perhaps", "boolean"},
+		{"integer", "port=eighty", "integer"},
+		{"number", "ratio=half", "number"},
+		{"array", "tags=a,b", "array"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeBackstage{}
+			deps := createDeps(t, typedTemplate(), fake)
+
+			_, err := runRoot(t, deps, "backstage", "create", "svc",
+				"--field", "name=x", "--field", tc.field)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to mention %q", err, tc.want)
+			}
+			if len(fake.scaffolded) != 0 {
+				t.Error("the run was submitted anyway")
+			}
+		})
+	}
+}
+
+func TestBackstageCreateRejectsMalformedFieldFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--field", "novalue"},
+		{"--field", "=orphan"},
+		{"--field", "name=a", "--field", "name=b"},
+	} {
+		fake := &fakeBackstage{}
+		deps := createDeps(t, typedTemplate(), fake)
+
+		full := append([]string{"backstage", "create", "svc"}, args...)
+		if _, err := runRoot(t, deps, full...); err == nil {
+			t.Errorf("%v: want an error", args)
+		}
+		if len(fake.scaffolded) != 0 {
+			t.Errorf("%v: the run was submitted", args)
+		}
+	}
+}
+
+func TestBackstageCreateDryRunSendsNothing(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	out, err := runRoot(t, deps, "backstage", "create", "svc",
+		"--field", "name=payments", "--field", "port=8080", "--dry-run")
+	if err != nil {
+		t.Fatalf("backstage create --dry-run: %v", err)
+	}
+	if len(fake.scaffolded) != 0 {
+		t.Fatal("--dry-run submitted a run")
+	}
+	for _, want := range []string{"template:default/svc", "payments", "8080", "Nothing was sent"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestBackstageCreateDryRunValidatesToo(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	if _, err := runRoot(t, deps, "backstage", "create", "svc", "--dry-run"); err == nil {
+		t.Fatal("--dry-run accepted a missing required field")
+	}
+}
+
+func TestBackstageCreateNoWait(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	out, err := runRoot(t, deps, "backstage", "create", "svc",
+		"--field", "name=x", "--no-wait")
+	if err != nil {
+		t.Fatalf("backstage create --no-wait: %v", err)
+	}
+	if !strings.Contains(out, "task-1") || !strings.Contains(out, "/create/tasks/task-1") {
+		t.Errorf("output:\n%s", out)
+	}
+	// Nothing was followed.
+	if fake.taskCalls != 0 {
+		t.Errorf("--no-wait polled the task %d times", fake.taskCalls)
+	}
+}
+
+func TestBackstageCreateFollowsTheRun(t *testing.T) {
+	fake := &fakeBackstage{
+		statuses: []string{"processing", "completed"},
+		events: []backstage.TaskEvent{
+			{ID: 1, Type: "log", Message: "Beginning step Fetch"},
+			{ID: 2, Type: "log", Message: "Beginning step Publish"},
+			{ID: 3, Type: "completion", Message: "Run completed with status: completed",
+				Output: map[string]interface{}{"links": []interface{}{
+					map[string]interface{}{"title": "Repository", "url": "https://github.com/acme/payments"},
+					map[string]interface{}{"title": "Open in catalog", "entityRef": "component:default/payments"},
+				}}},
+		},
+	}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	out, err := runRoot(t, deps, "backstage", "create", "svc", "--field", "name=payments")
+	if err != nil {
+		t.Fatalf("backstage create: %v", err)
+	}
+	for _, want := range []string{
+		"Beginning step Fetch", "Beginning step Publish", "completed",
+		"Repository", "https://github.com/acme/payments", "component:default/payments",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestBackstageCreateFailedRunExitsNonZero(t *testing.T) {
+	fake := &fakeBackstage{
+		statuses: []string{"failed"},
+		events: []backstage.TaskEvent{
+			{ID: 1, Type: "log", Message: "Beginning step Publish"},
+			{ID: 2, Type: "completion", Message: "Run completed with status: failed",
+				Error: "InputError: No token available for host: github.com"},
+		},
+	}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	out, err := runRoot(t, deps, "backstage", "create", "svc", "--field", "name=x")
+	if err == nil {
+		t.Fatal("a failed run exited zero")
+	}
+	// The log is already on screen, so the entrypoint must not print again.
+	var silent SilentError
+	if !errors.As(err, &silent) {
+		t.Errorf("error is not a SilentError: %v", err)
+	}
+	if !strings.Contains(out, "No token available") {
+		t.Errorf("the failure reason was not shown:\n%s", out)
+	}
+}
+
+func TestBackstageCreateJSON(t *testing.T) {
+	fake := &fakeBackstage{
+		statuses: []string{"completed"},
+		events: []backstage.TaskEvent{
+			{ID: 1, Type: "log", Message: "Beginning step Fetch"},
+			{ID: 2, Type: "completion", Output: map[string]interface{}{"remoteUrl": "https://github.com/acme/x"}},
+		},
+	}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	out, err := runRoot(t, deps, "backstage", "create", "svc", "--field", "name=x", "--json")
+	if err != nil {
+		t.Fatalf("backstage create --json: %v", err)
+	}
+
+	var payload struct {
+		ID     string                 `json:"id"`
+		Status string                 `json:"status"`
+		URL    string                 `json:"url"`
+		Log    []string               `json:"log"`
+		Output map[string]interface{} `json:"output"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("decoding %q: %v", out, err)
+	}
+	if payload.ID != "task-1" || payload.Status != "completed" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if len(payload.Log) != 1 || payload.Log[0] != "Beginning step Fetch" {
+		t.Errorf("log = %v", payload.Log)
+	}
+	if payload.Output["remoteUrl"] != "https://github.com/acme/x" {
+		t.Errorf("output = %v", payload.Output)
+	}
+}
+
+func TestBackstageCreateUnknownTemplate(t *testing.T) {
+	fake := &fakeBackstage{}
+	deps := backstageDeps(fake)
+
+	_, err := runRoot(t, deps, "backstage", "create", "nope", "--field", "name=x")
+	if !errors.Is(err, backstage.ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+	if len(fake.scaffolded) != 0 {
+		t.Error("a run was submitted for a template that does not exist")
+	}
+}
+
+func TestBackstageCreateDefaultsTheKindToTemplate(t *testing.T) {
+	fake := &fakeBackstage{statuses: []string{"completed"}}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	if _, err := runRoot(t, deps, "backstage", "create", "svc", "--field", "name=x"); err != nil {
+		t.Fatalf("backstage create: %v", err)
+	}
+	if len(fake.refs) != 1 || fake.refs[0].String() != "template:default/svc" {
+		t.Fatalf("refs = %v", fake.refs)
+	}
+}
+
+func TestBackstageCreateTimesOutOnAStuckRun(t *testing.T) {
+	fake := &fakeBackstage{statuses: []string{"processing"}}
+	deps := createDeps(t, typedTemplate(), fake)
+
+	_, err := runRoot(t, deps, "backstage", "create", "svc",
+		"--field", "name=x", "--timeout", "1ms")
+	if err == nil || !strings.Contains(err.Error(), "still processing") {
+		t.Fatalf("error = %v, want the timeout to be reported", err)
+	}
+	if !strings.Contains(err.Error(), "/create/tasks/task-1") {
+		t.Errorf("the timeout does not say where to follow the run: %v", err)
+	}
+}

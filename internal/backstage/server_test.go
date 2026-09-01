@@ -2,6 +2,7 @@ package backstage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +37,13 @@ type standIn struct {
 	status int
 	// errorBody is the body sent alongside status.
 	errorBody string
+
+	// Scaffolder responses.
+	taskCreated string
+	task        string
+	taskEvents  string
+	// postedBody is the decoded body of the last POST.
+	postedBody map[string]interface{}
 }
 
 func newStandIn(t *testing.T) *standIn {
@@ -83,6 +91,31 @@ func newStandIn(t *testing.T) *standIn {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"facets":{"kind":[{"value":"Component","count":42},{"value":"API","count":7}]}}`))
+	})
+
+	mux.HandleFunc("/api/scaffolder/v2/tasks", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&s.postedBody)
+		}
+		if fail(w) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(s.taskCreated))
+	})
+
+	mux.HandleFunc("/api/scaffolder/v2/tasks/", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		if fail(w) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			_, _ = w.Write([]byte(s.taskEvents))
+			return
+		}
+		_, _ = w.Write([]byte(s.task))
 	})
 
 	mux.HandleFunc("/api/catalog/entities/by-name/", func(w http.ResponseWriter, r *http.Request) {
@@ -575,4 +608,223 @@ func equal(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+// ---------------------------------------------------------------------------
+// Scaffolder
+// ---------------------------------------------------------------------------
+
+func TestScaffoldSubmitsATask(t *testing.T) {
+	s := newStandIn(t)
+	s.taskCreated = `{"id":"b72bc354-76c7-4621-8888-96be4529bb72"}`
+
+	ref, err := ParseEntityRef("terraform-module", "template")
+	if err != nil {
+		t.Fatalf("ParseEntityRef: %v", err)
+	}
+
+	task, err := s.client("tok").Scaffold(context.Background(), ref, map[string]interface{}{
+		"name": "s3-bucket", "port": 8080, "includeAdr": true,
+	})
+	if err != nil {
+		t.Fatalf("Scaffold: %v", err)
+	}
+
+	if task.ID != "b72bc354-76c7-4621-8888-96be4529bb72" || task.Status != "open" {
+		t.Fatalf("task = %+v", task)
+	}
+	if task.URL != s.server.URL+"/create/tasks/"+task.ID {
+		t.Errorf("URL = %q", task.URL)
+	}
+
+	got := s.last()
+	if got.method != http.MethodPost || got.path != "/api/scaffolder/v2/tasks" {
+		t.Fatalf("%s %s", got.method, got.path)
+	}
+	if got.auth != "Bearer tok" {
+		t.Errorf("Authorization = %q", got.auth)
+	}
+
+	if ref := s.postedBody["templateRef"]; ref != "template:default/terraform-module" {
+		t.Errorf("templateRef = %v", ref)
+	}
+	values, _ := s.postedBody["values"].(map[string]interface{})
+	if values["name"] != "s3-bucket" || values["includeAdr"] != true {
+		t.Errorf("values = %v", values)
+	}
+	// Sent explicitly rather than omitted.
+	if _, ok := s.postedBody["secrets"]; !ok {
+		t.Error("the request carried no secrets object")
+	}
+}
+
+func TestScaffoldRejectsARefWithNoKind(t *testing.T) {
+	s := newStandIn(t)
+
+	_, err := s.client("").Scaffold(context.Background(), EntityRef{Name: "x"}, nil)
+	if err == nil {
+		t.Fatal("want an error for an incomplete ref")
+	}
+	if len(s.requests) != 0 {
+		t.Error("a request was made with an invalid ref")
+	}
+}
+
+func TestScaffoldWithNoTaskIDInTheResponse(t *testing.T) {
+	s := newStandIn(t)
+	s.taskCreated = `{}`
+
+	_, err := s.client("").Scaffold(context.Background(),
+		EntityRef{Kind: "template", Namespace: "default", Name: "x"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "no task id") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestTaskDecodesTheRun(t *testing.T) {
+	s := newStandIn(t)
+	s.task = `{
+		"id": "abc", "status": "failed",
+		"createdAt": "2026-09-01T04:42:57.000Z", "createdBy": "user:default/guest",
+		"spec": {"templateInfo": {"entityRef": "template:default/terraform-module"}}
+	}`
+
+	task, err := s.client("").Task(context.Background(), "abc")
+	if err != nil {
+		t.Fatalf("Task: %v", err)
+	}
+	if task.ID != "abc" || task.Status != "failed" {
+		t.Fatalf("task = %+v", task)
+	}
+	if task.TemplateRef != "template:default/terraform-module" {
+		t.Errorf("TemplateRef = %q", task.TemplateRef)
+	}
+	if task.CreatedBy != "user:default/guest" {
+		t.Errorf("CreatedBy = %q", task.CreatedBy)
+	}
+	if !task.Done() || !task.Failed() {
+		t.Errorf("Done()/Failed() = %v/%v for a failed task", task.Done(), task.Failed())
+	}
+}
+
+func TestTaskStateHelpers(t *testing.T) {
+	cases := []struct {
+		status string
+		done   bool
+		failed bool
+	}{
+		{"open", false, false},
+		{"processing", false, false},
+		{"completed", true, false},
+		{"skipped", true, false},
+		{"failed", true, true},
+		{"cancelled", true, true},
+		{"COMPLETED", true, false},
+		{"", false, false},
+	}
+	for _, tc := range cases {
+		task := Task{Status: tc.status}
+		if task.Done() != tc.done || task.Failed() != tc.failed {
+			t.Errorf("%q: Done()=%v Failed()=%v, want %v/%v",
+				tc.status, task.Done(), task.Failed(), tc.done, tc.failed)
+		}
+	}
+}
+
+func TestTaskEventsDecodesLogsAndCompletion(t *testing.T) {
+	s := newStandIn(t)
+	s.taskEvents = `{"events":[
+		{"id":1,"taskId":"abc","type":"log","createdAt":"t0","body":{"message":"Beginning step Fetch\n"}},
+		{"id":2,"taskId":"abc","type":"completion","createdAt":"t1","body":{
+			"message":"Run completed with status: failed",
+			"error":{"name":"InputError","message":"No token available for host: github.com"}
+		}}
+	]}`
+
+	events, err := s.client("").TaskEvents(context.Background(), "abc", 0)
+	if err != nil {
+		t.Fatalf("TaskEvents: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events", len(events))
+	}
+	// The trailing newline the scaffolder appends is trimmed, so callers can
+	// print with Println without doubling the blank lines.
+	if events[0].Message != "Beginning step Fetch" {
+		t.Errorf("message = %q", events[0].Message)
+	}
+	if events[1].Type != "completion" {
+		t.Errorf("type = %q", events[1].Type)
+	}
+	if events[1].Error != "InputError: No token available for host: github.com" {
+		t.Errorf("error = %q", events[1].Error)
+	}
+}
+
+func TestTaskEventsDecodesOutputAndAcceptsABareArray(t *testing.T) {
+	s := newStandIn(t)
+	s.taskEvents = `[
+		{"id":9,"type":"completion","body":{"output":{"links":[{"title":"Repository","url":"https://github.com/acme/x"}]}}}
+	]`
+
+	events, err := s.client("").TaskEvents(context.Background(), "abc", 5)
+	if err != nil {
+		t.Fatalf("TaskEvents: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events", len(events))
+	}
+	links, _ := events[0].Output["links"].([]interface{})
+	if len(links) != 1 {
+		t.Fatalf("output = %v", events[0].Output)
+	}
+	if got := s.last().query.Get("after"); got != "5" {
+		t.Errorf("after = %q", got)
+	}
+}
+
+func TestTaskEventsOmitsAfterWhenStartingFromScratch(t *testing.T) {
+	s := newStandIn(t)
+	s.taskEvents = `{"events":[]}`
+
+	if _, err := s.client("").TaskEvents(context.Background(), "abc", 0); err != nil {
+		t.Fatalf("TaskEvents: %v", err)
+	}
+	if s.last().query.Has("after") {
+		t.Errorf("after was sent for a fresh read: %v", s.last().query)
+	}
+}
+
+func TestTaskEventsWithAnUnreadableBody(t *testing.T) {
+	s := newStandIn(t)
+	// A body that is not an object: the event survives with no message
+	// rather than taking the whole listing down.
+	s.taskEvents = `{"events":[{"id":1,"type":"log","body":"just a string"}]}`
+
+	events, err := s.client("").TaskEvents(context.Background(), "abc", 0)
+	if err != nil {
+		t.Fatalf("TaskEvents: %v", err)
+	}
+	if len(events) != 1 || events[0].Message != "" || events[0].ID != 1 {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestScaffolderErrorsSurface(t *testing.T) {
+	s := newStandIn(t)
+	s.status = http.StatusForbidden
+	s.errorBody = `{"error":{"name":"NotAllowedError","message":"unauthorized"}}`
+
+	ref := EntityRef{Kind: "template", Namespace: "default", Name: "x"}
+	client := s.client("")
+
+	if _, err := client.Scaffold(context.Background(), ref, nil); err == nil {
+		t.Error("Scaffold: want an error")
+	}
+	if _, err := client.Task(context.Background(), "abc"); err == nil {
+		t.Error("Task: want an error")
+	}
+	if _, err := client.TaskEvents(context.Background(), "abc", 0); err == nil {
+		t.Error("TaskEvents: want an error")
+	}
 }

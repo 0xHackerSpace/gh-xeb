@@ -10,6 +10,7 @@
 package backstage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -93,6 +94,16 @@ type Client interface {
 	Entity(ctx context.Context, ref EntityRef) (Entity, error)
 	// Facets counts entities grouped by one or more fields.
 	Facets(ctx context.Context, fields ...string) (map[string][]Facet, error)
+
+	// Scaffold runs a template. It is the only call here that changes
+	// anything; see scaffolder.go.
+	Scaffold(ctx context.Context, ref EntityRef, values map[string]interface{}) (Task, error)
+	// Task reports the current state of a run.
+	Task(ctx context.Context, id string) (Task, error)
+	// TaskEvents returns a run's log entries with an id greater than after.
+	TaskEvents(ctx context.Context, id string, after int) ([]TaskEvent, error)
+	// TaskURL is where the portal shows a task.
+	TaskURL(id string) string
 }
 
 // Config configures a client. Every field is optional: what is left empty is
@@ -290,16 +301,38 @@ func (c *client) Facets(ctx context.Context, fields ...string) (map[string][]Fac
 
 // get performs a GET and decodes the JSON body into out.
 func (c *client) get(ctx context.Context, path string, query url.Values, out interface{}) error {
+	return c.do(ctx, http.MethodGet, path, query, nil, out)
+}
+
+// post performs a POST with a JSON body and decodes the response into out.
+func (c *client) post(ctx context.Context, path string, body, out interface{}) error {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encoding the request for %s: %w", path, err)
+	}
+	return c.do(ctx, http.MethodPost, path, nil, encoded, out)
+}
+
+// do performs one request and decodes the JSON body into out.
+func (c *client) do(ctx context.Context, method, path string, query url.Values, body []byte, out interface{}) error {
 	target := c.baseURL + path
 	if encoded := query.Encode(); encoded != "" {
 		target += "?" + encoded
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
 		return fmt.Errorf("building request for %s: %w", path, err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("User-Agent", c.userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
@@ -317,7 +350,7 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out int
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return apiError(resp, http.MethodGet, path)
+		return apiError(resp, method, path)
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {

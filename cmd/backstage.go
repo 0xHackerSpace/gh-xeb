@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/0xHackerSpace/gh-cli-extension/internal/backstage"
 	"github.com/0xHackerSpace/gh-cli-extension/internal/vault"
@@ -89,6 +91,7 @@ Every subcommand accepts --json.`,
 	root.AddCommand(
 		newBackstageEntitiesCmd(deps, &opts),
 		newBackstageOfertasCmd(deps, &opts),
+		newBackstageCreateCmd(deps, &opts),
 		newBackstageGetCmd(deps, &opts),
 		newBackstageRepoCmd(deps, &opts),
 	)
@@ -518,6 +521,27 @@ func templateFields(entity backstage.Entity) []templateField {
 	return fields
 }
 
+// templateSchemas returns each parameter's raw JSON Schema, keyed by name,
+// flattened across the form pages. `create` needs it to coerce a string from
+// the command line into the type the parameter declares.
+func templateSchemas(entity backstage.Entity) map[string]map[string]interface{} {
+	schemas := map[string]map[string]interface{}{}
+
+	for _, page := range parameterPages(entity.Spec["parameters"]) {
+		properties, _ := page["properties"].(map[string]interface{})
+		for name, schema := range properties {
+			if object, ok := schema.(map[string]interface{}); ok {
+				schemas[name] = object
+			} else {
+				// Present but unreadable: still a valid parameter name, just
+				// one we cannot type-check.
+				schemas[name] = map[string]interface{}{}
+			}
+		}
+	}
+	return schemas
+}
+
 // parameterPages normalises spec.parameters into a list of pages.
 func parameterPages(raw interface{}) []map[string]interface{} {
 	switch typed := raw.(type) {
@@ -589,6 +613,364 @@ func writeOfertas(w io.Writer, offers []templateOffer) {
 	}
 
 	fmt.Fprintln(w, "\n* required")
+}
+
+// ---------------------------------------------------------------------------
+// backstage create
+// ---------------------------------------------------------------------------
+
+// taskPollInterval is how often a run is polled while waiting. The scaffolder
+// has no long-poll, so this is a plain loop; a second is short enough to feel
+// live and long enough not to hammer a portal.
+const taskPollInterval = time.Second
+
+func newBackstageCreateCmd(deps Deps, opts *backstageOpts) *cobra.Command {
+	var (
+		fields  []string
+		dryRun  bool
+		noWait  bool
+		timeout time.Duration
+	)
+
+	c := &cobra.Command{
+		Use:   "create <template> [--field name=value]",
+		Short: "Run a scaffolder template",
+		Long: `create runs a Template, which is how the portal turns a template into a real
+repository. Use 'backstage ofertas' to see what each one asks for.
+
+The template is named the short way or in full:
+
+  gh cli-extension backstage create terraform-module --field name=s3-bucket
+  gh cli-extension backstage create template:default/terraform-module ...
+
+Values are given one --field at a time. They are checked against the
+template's own schema before anything is submitted, so a misspelled parameter
+or a missing required one fails locally rather than as a failed run in someone
+else's portal. Strings arrive as strings; a parameter the schema declares as a
+boolean, an integer or a number is converted, and one that expects an array or
+an object is rejected -- pass those through the portal.
+
+A repoUrl parameter uses the picker's own encoding, not a plain URL:
+
+  --field repoUrl=github.com?owner=acme&repo=payments
+
+This is the one command in this tree that changes something outside your
+machine: it creates a task, and a successful task creates a repository. Nothing
+about it is undone by interrupting it. --dry-run resolves and validates the
+values and prints what would be sent, without sending it.
+
+By default the run is followed until it finishes and its log is printed.
+--no-wait submits and returns the task id instead.`,
+		Example: `  gh cli-extension backstage create techdocs-site --field name=runbooks --dry-run
+  gh cli-extension backstage create terraform-module --field name=s3-bucket --field owner=group:default/guests --field provider=aws
+  gh cli-extension backstage create svc --field 'repoUrl=github.com?owner=acme&repo=payments' --no-wait`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			ref, err := backstage.ParseEntityRef(args[0], "template")
+			if err != nil {
+				return err
+			}
+
+			given, err := parseFieldFlags(fields)
+			if err != nil {
+				return err
+			}
+
+			return withBackstage(c, deps, *opts, func(ctx context.Context, client backstage.Client) error {
+				template, err := client.Entity(ctx, ref)
+				if err != nil {
+					return err
+				}
+
+				values, err := resolveTemplateValues(template, given)
+				if err != nil {
+					return err
+				}
+
+				out := c.OutOrStdout()
+
+				if dryRun {
+					if opts.asJSON {
+						return encodeJSON(out, map[string]interface{}{
+							"templateRef": ref.String(),
+							"values":      values,
+							"submitted":   false,
+						})
+					}
+					fmt.Fprintf(out, "%s\n\nWould submit:\n", ref)
+					writeValues(out, values)
+					fmt.Fprintln(out, "\nNothing was sent. Drop --dry-run to run it.")
+					return nil
+				}
+
+				task, err := client.Scaffold(ctx, ref, values)
+				if err != nil {
+					return err
+				}
+
+				if noWait {
+					if opts.asJSON {
+						return encodeJSON(out, task)
+					}
+					fmt.Fprintf(out, "%s\n%s\n", task.ID, task.URL)
+					return nil
+				}
+
+				return followTask(ctx, out, client, task, timeout, opts.asJSON)
+			})
+		},
+	}
+
+	c.Flags().StringArrayVar(&fields, "field", nil, "Template input as name=value; repeatable")
+	c.Flags().BoolVar(&dryRun, "dry-run", false, "Validate and print what would be sent, without sending it")
+	c.Flags().BoolVar(&noWait, "no-wait", false, "Submit and print the task id instead of following the run")
+	c.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "How long to follow the run before giving up on it")
+
+	return c
+}
+
+// parseFieldFlags turns --field name=value into a map, in order, rejecting the
+// shapes that are always a mistake.
+func parseFieldFlags(fields []string) (map[string]string, error) {
+	given := make(map[string]string, len(fields))
+
+	for _, raw := range fields {
+		name, value, found := strings.Cut(raw, "=")
+		if !found {
+			return nil, fmt.Errorf("--field %q needs a value, written name=value", raw)
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, fmt.Errorf("--field %q has no name", raw)
+		}
+		if _, repeated := given[name]; repeated {
+			return nil, fmt.Errorf("--field %s was given twice", name)
+		}
+		given[name] = value
+	}
+	return given, nil
+}
+
+// resolveTemplateValues checks the given values against the template's schema
+// and converts each to the type the parameter declares.
+func resolveTemplateValues(template backstage.Entity, given map[string]string) (map[string]interface{}, error) {
+	schemas := templateSchemas(template)
+
+	// Unknown names first: a typo should be reported as a typo, not as a
+	// missing required field somewhere else.
+	var unknown []string
+	for name := range given {
+		if _, ok := schemas[name]; !ok {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return nil, fmt.Errorf("%s has no parameter %s (it takes: %s)",
+			template.Metadata.Name,
+			strings.Join(quoteAll(unknown), ", "),
+			strings.Join(parameterNames(schemas), ", "))
+	}
+
+	values := map[string]interface{}{}
+	for name, raw := range given {
+		value, err := coerceValue(name, raw, schemas[name])
+		if err != nil {
+			return nil, err
+		}
+		values[name] = value
+	}
+
+	var missing []string
+	for _, field := range templateFields(template) {
+		if field.Required {
+			if _, ok := values[field.Name]; !ok {
+				missing = append(missing, field.Name)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("%s requires %s",
+			template.Metadata.Name, strings.Join(quoteAll(missing), ", "))
+	}
+
+	return values, nil
+}
+
+func parameterNames(schemas map[string]map[string]interface{}) []string {
+	names := make([]string, 0, len(schemas))
+	for name := range schemas {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// coerceValue converts a command-line string to what the schema declares.
+// Everything arrives as a string; sending "true" where the template expects a
+// boolean is rejected by the scaffolder with a message that does not mention
+// the quoting, so it is converted here instead.
+func coerceValue(name, raw string, schema map[string]interface{}) (interface{}, error) {
+	declared, _ := schema["type"].(string)
+
+	switch declared {
+	case "boolean":
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("--field %s expects a boolean, got %q", name, raw)
+		}
+		return parsed, nil
+	case "integer":
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("--field %s expects an integer, got %q", name, raw)
+		}
+		return parsed, nil
+	case "number":
+		parsed, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("--field %s expects a number, got %q", name, raw)
+		}
+		return parsed, nil
+	case "array", "object":
+		return nil, fmt.Errorf("--field %s expects %s, which this command cannot express; run this template from the portal",
+			name, declared)
+	default:
+		// "string", or a schema that declares nothing. Passing the string
+		// through is right either way.
+		return raw, nil
+	}
+}
+
+func writeValues(w io.Writer, values map[string]interface{}) {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+	for _, name := range names {
+		fmt.Fprintf(tw, "  %s\t%v\n", name, values[name])
+	}
+	tw.Flush()
+}
+
+// followTask prints a run's log as it arrives and returns when it ends.
+//
+// A failed run returns a SilentError: its log has already been printed, and
+// the entrypoint should set the exit code without adding a second message.
+func followTask(ctx context.Context, w io.Writer, client backstage.Client, task backstage.Task, timeout time.Duration, asJSON bool) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if !asJSON {
+		fmt.Fprintf(w, "%s\n%s\n\n", task.ID, task.URL)
+	}
+
+	var (
+		after   int
+		lines   []string
+		outputs map[string]interface{}
+		failure string
+	)
+
+	for {
+		events, err := client.TaskEvents(ctx, task.ID, after)
+		if err != nil {
+			return err
+		}
+
+		for _, event := range events {
+			if event.ID > after {
+				after = event.ID
+			}
+			if event.Message != "" {
+				lines = append(lines, event.Message)
+				if !asJSON {
+					fmt.Fprintln(w, event.Message)
+				}
+			}
+			if event.Type == "completion" {
+				outputs, failure = event.Output, event.Error
+			}
+		}
+
+		current, err := client.Task(ctx, task.ID)
+		if err != nil {
+			return err
+		}
+		task = current
+
+		if task.Done() {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("task %s is still %s after %s; follow it at %s",
+				task.ID, task.Status, timeout, task.URL)
+		case <-time.After(taskPollInterval):
+		}
+	}
+
+	if asJSON {
+		payload := map[string]interface{}{
+			"id": task.ID, "status": task.Status, "url": task.URL,
+			"templateRef": task.TemplateRef, "log": lines,
+		}
+		if outputs != nil {
+			payload["output"] = outputs
+		}
+		if failure != "" {
+			payload["error"] = failure
+		}
+		if err := encodeJSON(w, payload); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(w, "\n%s\n", task.Status)
+		if failure != "" {
+			fmt.Fprintf(w, "  %s\n", failure)
+		}
+		writeTaskOutput(w, outputs)
+	}
+
+	if task.Failed() {
+		return SilentError{Err: fmt.Errorf("task %s %s", task.ID, task.Status)}
+	}
+	return nil
+}
+
+// writeTaskOutput renders the template's declared output, which is a list of
+// links often enough to be worth handling specially.
+func writeTaskOutput(w io.Writer, output map[string]interface{}) {
+	if len(output) == 0 {
+		return
+	}
+
+	links, _ := output["links"].([]interface{})
+	if len(links) == 0 {
+		fmt.Fprintln(w, "\nOutput")
+		writeValues(w, output)
+		return
+	}
+
+	fmt.Fprintln(w, "\nOutput")
+	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+	for _, raw := range links {
+		link, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		title, _ := link["title"].(string)
+		target, _ := link["url"].(string)
+		if target == "" {
+			target, _ = link["entityRef"].(string)
+		}
+		fmt.Fprintf(tw, "  %s\t%s\n", title, target)
+	}
+	tw.Flush()
 }
 
 // ---------------------------------------------------------------------------
