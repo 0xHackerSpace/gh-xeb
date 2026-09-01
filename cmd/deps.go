@@ -26,6 +26,12 @@ type Deps struct {
 	// NewBackstageClient talks to a Backstage catalog; see internal/backstage.
 	// It takes no context: the constructor performs no I/O.
 	NewBackstageClient func(backstage.Config) (backstage.Client, error)
+
+	// UserHomeDir and WorkingDir are where `harness install` decides to write.
+	// They are injected so a test can point an install at a temp directory
+	// instead of the developer's real home.
+	UserHomeDir func() (string, error)
+	WorkingDir  func() (string, error)
 }
 
 // DefaultDeps wires the real implementations.
@@ -40,5 +46,8 @@ func DefaultDeps() Deps {
 		GitHubToken:        gh.Token,
 		NewVaultClient:     vault.New,
 		NewBackstageClient: backstage.New,
+
+		UserHomeDir: os.UserHomeDir,
+		WorkingDir:  os.Getwd,
 	}
 }

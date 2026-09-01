@@ -20,6 +20,12 @@ coverage.html
 # Local, machine-specific agent settings
 .claude/settings.local.json
 
+# Agent skills written by `gh xeb harness install`. Generated from the command
+# tree, so committing them would put a file in version control that goes stale
+# in silence -- run the command instead.
+.claude/skills/
+.github/skills/
+
 .notes
 
 use-case/*
