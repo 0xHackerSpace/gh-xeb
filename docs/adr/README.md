@@ -39,6 +39,7 @@ invisible in the code.
 | [0011](0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | Accepted |
 | [0012](0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | Accepted |
 | [0013](0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | Accepted |
-| [0014](0014-vault-command.md) | `vault` reports the resources a token can reach | Accepted |
+| [0014](0014-vault-command.md) | `vault` reports the resources a token can reach | Accepted (extended by 0017) |
 | [0015](0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | Accepted |
 | [0016](0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | Accepted |
+| [0017](0017-vault-get-masked-by-default.md) | `vault get` reads secret values but masks them by default | Accepted |

@@ -1,6 +1,6 @@
 # ADR-0014: `vault` reports the resources a token can reach
 
-- **Status:** Accepted
+- **Status:** Accepted (extended by [ADR-0017](0017-vault-get-masked-by-default.md))
 - **Date:** 2026-08-28
 - **Deciders:** @IanOliv
 - **Applies:** [ADR-0010](0010-vault-official-sdk.md), which chose the SDK

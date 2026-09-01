@@ -20,9 +20,10 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0011](adr/0011-doctor-scope.md) | `doctor` reports Vault readiness without contacting Vault | 2026-08-28 | Accepted |
 | [0012](adr/0012-doctor-json-output.md) | `doctor --json` emits identity attributes as a stable contract | 2026-08-28 | Accepted |
 | [0013](adr/0013-cmd-at-repo-root.md) | Move the command tree from `internal/cmd` to `cmd` | 2026-08-28 | Accepted |
-| [0014](adr/0014-vault-command.md) | `vault` reports the resources a token can reach | 2026-08-28 | Accepted |
+| [0014](adr/0014-vault-command.md) | `vault` reports the resources a token can reach | 2026-08-28 | Accepted (extended by 0017) |
 | [0015](adr/0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | 2026-08-28 | Accepted |
 | [0016](adr/0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | 2026-09-01 | Accepted |
+| [0017](adr/0017-vault-get-masked-by-default.md) | `vault get` reads secret values but masks them by default | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -122,6 +123,13 @@ would have made a bare `backstage entities` ask for entities that have a kind
 *and* a type *and* an owner. A test caught it; `addValues` now skips empty
 flags.
 
+**2026-09-01 — `sys/health` is read at the root namespace, everything else is
+namespaced.** That endpoint exists only at the root, so sending
+`VAULT_NAMESPACE` with it asks for `<namespace>/sys/health` and gets a 404
+"unsupported path". The namespace is stripped for that one call via
+`api.WithNamespace("")`. It surfaced on HCP Vault, where the variable is always
+set, and is invisible on a dev server, where it never is.
+
 ## Open decisions
 
 Not decided yet. Listed so they are not forgotten rather than to be resolved
@@ -147,10 +155,21 @@ questions above are settled.
 repository exists to explore the extension API — this is the obvious next
 thing to try.
 
-**Browsing and reading secrets.** `vault ls <path>` to walk a KV mount is the
-natural next command; reading a secret's *value* needs its own decision about
-putting sensitive material on a terminal
-([ADR-0014](adr/0014-vault-command.md)).
+**Browsing a KV mount.** `vault ls <path>` to walk a mount is still the missing
+half. Reading a value was the other half and is now decided
+([ADR-0017](adr/0017-vault-get-masked-by-default.md)); walking is what remains,
+and it is where the cost shows: one request per directory plus one per secret,
+all of it in the audit log. `sys/capabilities-self` takes several paths per
+request and is the way to keep that cheap.
+
+**Writing a secret.** The first mutating operation on a secret engine, and the
+one ADR-0017 names as its own revisit trigger. It needs an answer for where the
+value comes from, since it must not be a command-line argument.
+
+**Rendering `spec.parameters` in `backstage get`.** For a `Template` the
+parameters *are* the content, and today they appear only under `--json`. The
+text view shows type, lifecycle, owner and relations, which for a Template is
+the least interesting part of it.
 
 **Should `doctor` know about Backstage?** It reports GitHub and Vault
 readiness. The catalog is now a third service the extension can be configured

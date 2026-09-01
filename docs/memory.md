@@ -8,7 +8,7 @@ For *how* to write code here, see [`AGENTS.md`](../AGENTS.md). For *why* the
 architecture is the way it is, see [`decisions.md`](decisions.md) and
 [`adr/`](adr/).
 
-Last updated: 2026-08-28.
+Last updated: 2026-09-01.
 
 ## What this is, and what it is for
 
@@ -22,12 +22,13 @@ capability (`whoami` = REST via go-gh, `repo` = repository resolution), not
 because someone needs them. Breadth of the extension API beats depth of any
 single feature. There are no users to keep compatibility with yet.
 
-## State as of 2026-08-28
+## State as of 2026-09-01
 
 Scaffolding is complete and verified end to end:
 
-- Five working subcommands: `vault` (with `token`, `mounts`, `can`), `doctor`,
-  `whoami`, `repo`, `version`.
+- Six working subcommands: `vault` (with `token`, `mounts`, `can`, `get`),
+  `backstage` (with `entities`, `get`, `repo`), `doctor`, `whoami`, `repo`,
+  `version`.
 - `doctor` is the first command written for the project's actual purpose:
   feeding GitHub identity attributes to HashiCorp Vault. It stops at the GitHub
   boundary on purpose — it reads `VAULT_ADDR` from the environment but never
@@ -45,8 +46,9 @@ Scaffolding is complete and verified end to end:
   first real test of the workflows.
 - The extension is installed locally and working:
   `gh cli-extension whoami` → `You are @IanOliv (Ian Gabriel Oliveira de Sousa).`
-- Nothing is committed. The whole scaffold is uncommitted in the working tree,
-  on `main`, over the single `61c0a27 Initial commit`.
+- Work is committed on the `feat/extension-scaffold-and-doctor` branch, over
+  the single `61c0a27 Initial commit` on `main`. **Nothing has been pushed**,
+  so no workflow has ever run and there is no PR.
 
 ## Where the Vault work is heading (mostly arrived)
 
@@ -65,6 +67,12 @@ GitHub team membership**. `doctor` surfaces the teams, `vault` shows what a
 token resolves to, and nothing yet joins them. That is a write operation and
 needs its own design.
 
+`vault get` reads a KV secret but masks the values by default, showing only
+which fields exist and how long each value is
+([ADR-0017](adr/0017-vault-get-masked-by-default.md)). `--reveal` prints them
+all, `--field <key>` prints one raw for piping. This diverges from the `vault`
+CLI, which prints values — the divergence is the decision, not an oversight.
+
 Two things about `vault` that are easy to get wrong:
 
 - Mounts come from `sys/internal/ui/mounts`, never `sys/mounts`. The latter
@@ -74,6 +82,29 @@ Two things about `vault` that are easy to get wrong:
   `~/.vault-token` ([ADR-0015](adr/0015-vault-in-memory-login.md)). That is
   deliberate, not an oversight: a query command should not install credentials
   on a machine.
+
+## Backstage arrived on 2026-09-01
+
+`backstage` reads a Software Catalog: `entities` to list, `get` for one entity,
+`repo` for whatever describes the repository you are standing in
+([ADR-0016](adr/0016-backstage-catalog-command.md)).
+
+Three things worth knowing before changing it:
+
+- `internal/backstage` is **hand-written over `net/http`**, not an SDK, because
+  Backstage publishes no official Go client. That is the opposite call from
+  ADR-0010 on Vault and it was deliberate — there was an SDK worth paying for
+  there, there is nothing to pay for here. The cost is that pagination cursors,
+  the `filter` grammar and the error envelope are ours to keep correct.
+- The token comes **only** from `BACKSTAGE_TOKEN`; there is no `--token` flag,
+  and `TestBackstageHasNoTokenFlag` fails if one reappears.
+- `backstage repo` matches on the `github.com/project-slug` annotation. An
+  entity registered without it will not be found even though it describes the
+  repository, and the output says which annotation it looked for rather than
+  claiming the repository is unregistered.
+
+`backstage get` does not render `spec.parameters`, which for a `Template` is
+the whole content — it only appears under `--json`. Listed as an open decision.
 
 ## The development machine
 
@@ -121,6 +152,19 @@ left alone on purpose.
 `TestDoctorReport` pins the text layout; `TestDoctorJSONPayload` pins the JSON
 document. Both fail on purpose when the output changes — update the expected
 value deliberately instead of loosening the assertion.
+
+**`sys/health` is the one Vault endpoint that is not namespaced.** It exists
+only at the root namespace, so sending `VAULT_NAMESPACE` with it returns a 404
+"unsupported path". `internal/vault` strips the namespace for that call alone.
+This is invisible on a dev server, where the variable is never set, and breaks
+immediately on HCP Vault, where it always is.
+
+**A local Backstage refuses the catalog API with 401 unless a token is sent.**
+`permission.enabled: true` plus no `backend.auth.externalAccess` is the default
+for a scaffolded instance. With the guest provider enabled, a working token
+comes from `GET /api/auth/guest/refresh` (`.backstageIdentity.token`) and lasts
+an hour, which is enough to try a command against real data without editing
+`app-config`.
 
 **The release build matrix is duplicated.** `script/build.sh` builds the real
 artifacts; the `cross-compile` job in `ci.yml` only checks each target still
