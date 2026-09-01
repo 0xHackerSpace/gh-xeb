@@ -27,7 +27,7 @@ gh cli-extension <command>
 | Command | Description |
 | --- | --- |
 | `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`, `get <path>`. |
-| `backstage` | Query a Backstage software catalog. Subcommands `entities`, `get <ref>`, `repo`. |
+| `backstage` | Query a Backstage software catalog. Subcommands `entities`, `ofertas`, `get <ref>`, `repo`. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |
@@ -147,6 +147,68 @@ gh cli-extension backstage entities --filter 'relations.ownedBy=group:default/pl
 gh cli-extension backstage entities --filter 'metadata.annotations.backstage.io/techdocs-ref'
 ```
 
+`ofertas` answers a different question: not "what is in the catalog" but "what
+can I ask the portal to create, and what will it need from me?" It lists every
+`Template` with the inputs each one asks for, flattened out of its
+`spec.parameters`.
+
+```
+$ gh cli-extension backstage ofertas
+node-typescript-api  Node.js + TypeScript API
+  Serviço HTTP em Node.js com TypeScript e Express, já com testes (vitest), lint, Dockerfile multi-stage, GitHub Actions e TechDocs.
+
+  * name          Nome único do componente (kebab-case)
+  * owner         Time responsável pelo serviço
+  * system        System ao qual o serviço pertence
+    description   O que este serviço faz
+    nodeVersion   Versão do Node
+    port          Porta HTTP
+  * repoUrl       Localização do repositório
+
+terraform-module  Módulo Terraform
+  Módulo Terraform reutilizável com main/variables/outputs, exemplo executável, validação de fmt/validate/tflint no CI e registro como Resource no catálogo.
+
+  * name               Sem o prefixo "terraform-" (ex.- "s3-bucket")
+  * owner              Owner
+    description        O que este módulo provisiona
+    system             System ao qual a infraestrutura pertence
+  * provider           Provider principal
+    terraformVersion   Versão mínima do Terraform
+  * repoUrl            Localização do repositório
+
+* required
+```
+
+`--json` gives the structure, with `fields` mapped out of the parameter schema:
+
+```json
+{
+  "count": 4,
+  "templates": [
+    {
+      "name": "terraform-module",
+      "title": "Módulo Terraform",
+      "description": "Módulo Terraform reutilizável com main/variables/outputs, ...",
+      "fields": [
+        { "name": "name",     "description": "Sem o prefixo \"terraform-\"", "required": true },
+        { "name": "owner",    "description": "Owner",                        "required": true },
+        { "name": "provider", "description": "Provider principal",           "required": true },
+        { "name": "repoUrl",  "description": "Localização do repositório",   "required": true },
+        { "name": "description",      "description": "O que este módulo provisiona",    "required": false },
+        { "name": "system",           "description": "System ao qual a infra pertence", "required": false },
+        { "name": "terraformVersion", "description": "Versão mínima do Terraform",      "required": false }
+      ]
+    }
+  ]
+}
+```
+
+A field with no `description` in the schema falls back to its form label. Order
+is the order of the form pages; within a page, required fields come first and
+then alphabetical — the schema's own order inside a page is not recoverable
+once the entity is decoded ([ADR-0019](docs/adr/0019-backstage-ofertas.md)).
+Aliases: `offerings`, `templates`.
+
 `get` takes a reference — `[<kind>:][<namespace>/]<name>`, namespace defaulting
 to `default`.
 
@@ -206,6 +268,41 @@ Not in the catalog: no entity is annotated github.com/project-slug=0xHackerSpace
 
 Give the app's address, not the API path: `/api/catalog` is appended per
 request. A bare host is assumed to be `https`.
+
+##### Taking both out of the environment, with Vault
+
+`--vault-secret` reads the address and the token from a Vault KV secret
+instead, so neither has to live in your shell:
+
+```sh
+gh cli-extension backstage --vault-secret secret/backstage
+```
+
+The secret should carry a `url` field, a `token` field, or both — `base_url`
+and `api_token` are accepted too:
+
+```sh
+vault kv put secret/backstage   url=https://backstage.example.com   token=<the catalog token>
+```
+
+Vault is reached exactly as the `vault` command reaches it: `VAULT_ADDR`,
+`VAULT_TOKEN`, `~/.vault-token`, and failing those a login through Vault's
+GitHub auth method with your `gh` credentials. So being logged in to `gh` can
+be enough to query a catalog you hold no local credential for. Use
+`--vault-auth-path` if that method is not mounted at `auth/github`.
+
+Set `BACKSTAGE_VAULT_SECRET` to skip the flag. Where each value comes from,
+first match winning:
+
+| | Order |
+| --- | --- |
+| url | `--url`, then the Vault secret, then `BACKSTAGE_BASE_URL`, `BACKSTAGE_URL` |
+| token | the Vault secret, then `BACKSTAGE_TOKEN` |
+
+The token goes straight from Vault into the catalog request. It is never
+printed, never logged, and never written to disk. A secret carrying neither
+field is an error that names the fields it *does* carry — field names only,
+never values.
 
 There is deliberately **no `--token` flag**. A secret passed as a command-line
 argument is visible in your shell history and in `ps` to every other user on

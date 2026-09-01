@@ -43,3 +43,5 @@ invisible in the code.
 | [0015](0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | Accepted |
 | [0016](0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | Accepted |
 | [0017](0017-vault-get-masked-by-default.md) | `vault get` reads secret values but masks them by default | Accepted |
+| [0018](0018-backstage-config-from-vault.md) | `backstage` can take its address and token from a Vault secret | Accepted |
+| [0019](0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | Accepted |

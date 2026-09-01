@@ -24,6 +24,8 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0015](adr/0015-vault-in-memory-login.md) | Log in to Vault in memory, never writing a token to disk | 2026-08-28 | Accepted |
 | [0016](adr/0016-backstage-catalog-command.md) | `backstage` reads the software catalog through a hand-written client | 2026-09-01 | Accepted |
 | [0017](adr/0017-vault-get-masked-by-default.md) | `vault get` reads secret values but masks them by default | 2026-09-01 | Accepted |
+| [0018](adr/0018-backstage-config-from-vault.md) | `backstage` can take its address and token from a Vault secret | 2026-09-01 | Accepted |
+| [0019](adr/0019-backstage-ofertas.md) | `backstage ofertas` reshapes Templates into an offer catalogue | 2026-09-01 | Accepted |
 
 ## Smaller decisions, no ADR
 
@@ -166,10 +168,16 @@ request and is the way to keep that cheap.
 one ADR-0017 names as its own revisit trigger. It needs an answer for where the
 value comes from, since it must not be a command-line argument.
 
-**Rendering `spec.parameters` in `backstage get`.** For a `Template` the
-parameters *are* the content, and today they appear only under `--json`. The
-text view shows type, lifecycle, owner and relations, which for a Template is
-the least interesting part of it.
+**Rendering `spec.parameters` in `backstage get`.** `ofertas` now renders them
+for every template ([ADR-0019](adr/0019-backstage-ofertas.md)); `get` still
+renders them for none, which is an inconsistency a user will hit. Fixing it
+means a Template-shaped special case in a command that serves all kinds.
+
+**Preserving the field order a template's form actually uses.** `ofertas`
+sorts required-first then alphabetically because `Entity.Spec` is a decoded
+map and the schema's own order is gone by then. Recovering it means keeping
+`spec` as `json.RawMessage` in `internal/backstage` and decoding with an
+order-preserving reader — a change to the client, for a cosmetic gain.
 
 **Should `doctor` know about Backstage?** It reports GitHub and Vault
 readiness. The catalog is now a third service the extension can be configured

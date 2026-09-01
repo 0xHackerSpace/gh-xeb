@@ -85,11 +85,19 @@ Two things about `vault` that are easy to get wrong:
 
 ## Backstage arrived on 2026-09-01
 
-`backstage` reads a Software Catalog: `entities` to list, `get` for one entity,
-`repo` for whatever describes the repository you are standing in
-([ADR-0016](adr/0016-backstage-catalog-command.md)).
+`backstage` reads a Software Catalog: `entities` to list, `ofertas` for the
+scaffolder templates and the inputs each asks for, `get` for one entity, `repo`
+for whatever describes the repository you are standing in
+([ADR-0016](adr/0016-backstage-catalog-command.md),
+[ADR-0019](adr/0019-backstage-ofertas.md)).
 
-Three things worth knowing before changing it:
+`--vault-secret <path>` takes the address and the token out of the environment
+and reads them from a Vault KV secret instead
+([ADR-0018](adr/0018-backstage-config-from-vault.md)). It is the first place
+the two services the extension talks to are joined, and the join lives in
+`cmd/` on purpose — `internal/backstage` does not import `internal/vault`.
+
+Four things worth knowing before changing it:
 
 - `internal/backstage` is **hand-written over `net/http`**, not an SDK, because
   Backstage publishes no official Go client. That is the opposite call from
@@ -103,8 +111,14 @@ Three things worth knowing before changing it:
   repository, and the output says which annotation it looked for rather than
   claiming the repository is unregistered.
 
-`backstage get` does not render `spec.parameters`, which for a `Template` is
-the whole content — it only appears under `--json`. Listed as an open decision.
+- Vault is contacted **only** when `--vault-secret` or
+  `BACKSTAGE_VAULT_SECRET` is set. A test fails the build if that becomes
+  unconditional, which would add a Vault dependency to every catalog query.
+
+`backstage get` still does not render `spec.parameters` even though `ofertas`
+does, which is an inconsistency a user will hit. Listed as an open decision,
+along with the field-order problem: `ofertas` cannot reproduce the form's own
+ordering because `Entity.Spec` is a decoded map.
 
 ## The development machine
 
