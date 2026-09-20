@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gh-xeb": {
+      "command": "gh",
+      "args": ["xeb", "mcp"],
+      "disabled": false
+    }
+  }
+}
