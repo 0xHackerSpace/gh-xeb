@@ -29,6 +29,7 @@ gh xeb <command>
 | `vault` | Show the Vault resources your token can reach: server, token, visible mounts. Subcommands `token`, `mounts`, `can <path>`, `get <path>`. |
 | `backstage` | Query a Backstage software catalog and run its templates. Subcommands `entities`, `ofertas`, `create`, `get <ref>`, `repo`. |
 | `harness` | Teach a coding agent how to use this extension. Subcommand `install <agent>`. |
+| `mcp` | Run an MCP server exposing all CLI commands as discoverable tools via stdio. |
 | `doctor` | Check the GitHub identity attributes Vault's GitHub auth method consumes, and whether this shell is pointed at a Vault server. |
 | `whoami` | Print the authenticated GitHub user (REST call through go-gh). |
 | `repo` | Print the repository resolved from the current directory. |

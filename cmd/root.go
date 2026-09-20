@@ -36,6 +36,7 @@ resolving the current repository, and shelling out to gh itself.`,
 	root.AddCommand(newVaultCmd(deps))
 	root.AddCommand(newBackstageCmd(deps))
 	root.AddCommand(newHarnessCmd(deps))
+	root.AddCommand(newMcpCmd(deps))
 	root.AddCommand(newVersionCmd())
 
 	return root
