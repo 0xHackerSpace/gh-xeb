@@ -43,6 +43,15 @@ to disk, so nothing is left behind on the machine -- at the cost of a fresh
 login, and a new accessor in Vault, on every run. Run 'vault login' yourself if
 you would rather reuse one token.
 
+Paths take an environment. This organisation stores secrets as
+secret/<team>/<env>/<app>, so --env dev|uat|prod picks which one you mean:
+
+  vault get secret/abcd/{env}/backstage           # {env} is filled in
+  vault get secret/abcd/dev/backstage --env prod  # reads .../prod/...
+
+Without --env a path is passed through exactly as written, so the default
+cannot silently rewrite one.
+
 Every subcommand accepts --json.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -55,6 +64,14 @@ Every subcommand accepts --json.`,
 	root.PersistentFlags().BoolVar(&opts.asJSON, "json", false, "Emit the result as JSON")
 	root.PersistentFlags().StringVar(&opts.authPath, "auth-path", "github",
 		"Mount path of Vault's GitHub auth method, used only when no Vault token exists")
+	root.PersistentFlags().StringVar(&opts.env, "env", defaultEnv, envFlagUsage())
+
+	// Validated once for the whole subtree, before any subcommand opens a
+	// connection: a typo should not cost a login.
+	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		opts.envGiven = c.Flags().Changed("env")
+		return validateEnv(opts.env)
+	}
 
 	root.AddCommand(
 		newVaultTokenCmd(deps, &opts),
@@ -70,6 +87,12 @@ Every subcommand accepts --json.`,
 type vaultOpts struct {
 	asJSON   bool
 	authPath string
+	env      string
+	// envGiven is cobra's Changed() for --env, captured before a subcommand
+	// runs. It is the difference between "the default is dev" and "the user
+	// asked for dev", which decides whether a literal path segment is
+	// rewritten -- see applyEnv.
+	envGiven bool
 }
 
 // withClient builds an authenticated client and hands it to fn, turning the
@@ -283,7 +306,7 @@ is 'kv/data/prod/db'.`,
 		Example: "  gh xeb vault can kv/data/prod/db",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			path := args[0]
+			path := applyEnv(args[0], opts.env, opts.envGiven)
 			return withClient(c, deps, *opts, func(ctx context.Context, client vault.Client) error {
 				caps, err := client.Capabilities(ctx, path)
 				if err != nil {
@@ -396,8 +419,10 @@ says which it was.`,
 				return errors.New("--field already prints the value; --reveal adds nothing")
 			}
 
+			path := applyEnv(args[0], opts.env, opts.envGiven)
+
 			return withClient(c, deps, *opts, func(ctx context.Context, client vault.Client) error {
-				secret, err := client.ReadSecret(ctx, args[0])
+				secret, err := client.ReadSecret(ctx, path)
 				if err != nil {
 					return err
 				}

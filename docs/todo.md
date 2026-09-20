@@ -1,0 +1,21 @@
+compatibilidade:
+- novos comandos:
+  - terraform
+  - hcp-terraform
+  - awx
+  - service now
+  - azure
+  - aws
+  - gcp
+  - backstage
+  - open workflow specification:
+    - create
+    - run
+    - executor disponiveis
+      - terraform
+      - hcp-terraform
+      - awx
+      - service now
+      - azure
+      - aws
+      - gcp

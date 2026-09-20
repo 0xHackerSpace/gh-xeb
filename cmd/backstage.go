@@ -54,7 +54,10 @@ Vault KV secret instead:
   gh xeb backstage --vault-secret secret/backstage
 
 That secret should carry a 'url' field, a 'token' field, or both ('base_url'
-and 'api_token' are accepted too). Vault is reached exactly as the vault
+and 'api_token' are accepted too). The path takes --env like every other Vault
+path, so one invocation reaches each environment's catalog:
+
+  gh xeb backstage --vault-secret 'secret/abcd/{env}/backstage' --env prod Vault is reached exactly as the vault
 command reaches it -- VAULT_ADDR, VAULT_TOKEN, ~/.vault-token, and failing
 those a login through Vault's GitHub auth method with your gh credentials, so
 being logged in to gh can be enough to query a catalog you hold no local
@@ -87,6 +90,12 @@ Every subcommand accepts --json.`,
 		"Vault KV path holding the Backstage url and token (default $BACKSTAGE_VAULT_SECRET)")
 	root.PersistentFlags().StringVar(&opts.vaultAuthPath, "vault-auth-path", "github",
 		"Mount path of Vault's GitHub auth method, used only when no Vault token exists")
+	root.PersistentFlags().StringVar(&opts.env, "env", defaultEnv, envFlagUsage())
+
+	root.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		opts.envGiven = c.Flags().Changed("env")
+		return validateEnv(opts.env)
+	}
 
 	root.AddCommand(
 		newBackstageEntitiesCmd(deps, &opts),
@@ -105,6 +114,8 @@ type backstageOpts struct {
 	url           string
 	vaultSecret   string
 	vaultAuthPath string
+	env           string
+	envGiven      bool
 }
 
 // withBackstage builds a client and hands it to fn, turning the two ways this
@@ -118,6 +129,7 @@ func withBackstage(c *cobra.Command, deps Deps, opts backstageOpts, fn func(cont
 	cfg := backstage.Config{BaseURL: opts.url}
 
 	if secretPath := firstNonEmpty(opts.vaultSecret, deps.Getenv("BACKSTAGE_VAULT_SECRET")); secretPath != "" {
+		secretPath = applyEnv(secretPath, opts.env, opts.envGiven)
 		url, token, err := backstageFromVault(ctx, deps, secretPath, opts.vaultAuthPath)
 		if err != nil {
 			return err
