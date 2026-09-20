@@ -1,0 +1,293 @@
+{
+  "mcp_protocol_version": "2024-11-05",
+  "server": {
+    "name": "gh-xeb",
+    "version": "1.0.0"
+  },
+  "tools": [
+    {
+      "name": "vault",
+      "description": "Show the Vault resources your token can reach: server, token, visible mounts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "vault_token",
+      "description": "Show the Vault token details",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "vault_mounts",
+      "description": "Show visible Vault secret engines",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "vault_can",
+      "description": "Check capabilities at a Vault path",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Vault path to check capabilities for"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "vault_get",
+      "description": "Read a secret from Vault",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Vault secret path"
+          },
+          "mask": {
+            "type": "boolean",
+            "description": "Mask secret values in output (default: true)"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "backstage",
+      "description": "Query a Backstage software catalog",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Backstage address (default $BACKSTAGE_BASE_URL, then $BACKSTAGE_URL)"
+          },
+          "vault-secret": {
+            "type": "string",
+            "description": "Vault KV path holding the Backstage url and token"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "backstage_entities",
+      "description": "List catalog entities",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Only this kind (component, api, group, ...)"
+          },
+          "type": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Only this spec.type (service, website, library, ...)"
+          },
+          "owner": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Only entities with this spec.owner"
+          },
+          "search": {
+            "type": "string",
+            "description": "Full-text search across the entity"
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Follow pagination and return every match"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "backstage_ofertas",
+      "description": "List the scaffolder templates and the inputs each one asks for",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "backstage_get",
+      "description": "Show one catalog entity",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string",
+            "description": "Entity reference (e.g., component:payments or group:default/platform)"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Kind to assume when the reference omits it"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        },
+        "required": ["entity"]
+      }
+    },
+    {
+      "name": "backstage_repo",
+      "description": "Show the catalog entities for the current repository",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "backstage_create",
+      "description": "Run a scaffolder template (SIDE-EFFECTING: creates repositories)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "description": "Template name or reference"
+          },
+          "field": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Template input as name=value"
+          },
+          "dry-run": {
+            "type": "boolean",
+            "description": "Validate and print what would be sent, without sending it"
+          },
+          "no-wait": {
+            "type": "boolean",
+            "description": "Submit and print the task id instead of following the run"
+          }
+        },
+        "required": ["template"]
+      },
+      "side_effects": true
+    },
+    {
+      "name": "harness_install",
+      "description": "Generate the agent skill from the live command tree",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "description": "Agent to generate skill for (e.g., copilot)"
+          }
+        },
+        "required": ["agent"]
+      }
+    },
+    {
+      "name": "doctor",
+      "description": "Check GitHub identity and Vault readiness",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "whoami",
+      "description": "Print the authenticated GitHub user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "json": {
+            "type": "boolean",
+            "description": "Emit the result as JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "repo",
+      "description": "Print the repository resolved from the current directory",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "environment_variables": {
+    "VAULT_ADDR": "Vault server address",
+    "VAULT_TOKEN": "Vault authentication token",
+    "VAULT_NAMESPACE": "Vault namespace",
+    "BACKSTAGE_BASE_URL": "Backstage app address",
+    "BACKSTAGE_URL": "Backstage app address (fallback)",
+    "BACKSTAGE_TOKEN": "Backstage API token"
+  },
+  "notes": {
+    "important": [
+      "This file is auto-generated from the command tree",
+      "Run 'gh xeb mcp' to start the MCP server",
+      "Tools use the same validation and error handling as the CLI"
+    ],
+    "side_effects": [
+      "backstage_create: Creates repositories and runs templates",
+      "All other tools are read-only"
+    ],
+    "authentication": [
+      "GitHub: Requires 'gh auth login'",
+      "Vault: Requires VAULT_TOKEN or GitHub auth through Vault's GitHub auth method",
+      "Backstage: Requires BACKSTAGE_TOKEN or configuration in Vault secret"
+    ]
+  }
+}

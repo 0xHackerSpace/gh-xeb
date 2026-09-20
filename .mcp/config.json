@@ -1,0 +1,47 @@
+{
+  "name": "gh-xeb",
+  "version": "1.0.0",
+  "description": "MCP server exposing GitHub CLI extension (gh xeb) as tools",
+  "implementation": {
+    "transport": "stdio",
+    "command": "gh",
+    "args": ["xeb", "mcp"]
+  },
+  "metadata": {
+    "author": "0xHackerSpace",
+    "repository": "https://github.com/0xHackerSpace/gh-xeb",
+    "license": "MIT",
+    "documentation": "https://github.com/0xHackerSpace/gh-xeb#mcp"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false
+  },
+  "tools_categories": {
+    "vault": "Vault operations - query secrets and capabilities",
+    "backstage": "Backstage catalog operations - query entities and run templates",
+    "harness": "Agent instruction generation",
+    "doctor": "Diagnostic information",
+    "repo": "Repository information",
+    "whoami": "GitHub identity"
+  },
+  "notes": {
+    "setup": [
+      "Ensure gh-xeb extension is installed: gh extension install 0xHackerSpace/gh-xeb",
+      "Ensure gh is authenticated: gh auth login",
+      "Tools may require VAULT_ADDR and VAULT_TOKEN to be set for vault operations"
+    ],
+    "permissions": [
+      "gh-xeb has full access to GitHub APIs through gh CLI",
+      "gh-xeb can read Vault secrets if authenticated",
+      "gh-xeb can query Backstage catalogs",
+      "Side-effecting operations like 'backstage create' are marked"
+    ],
+    "sensitive_data": [
+      "Tokens and credentials are never printed in tool output",
+      "Use --mask flag with 'vault get' to protect secret values",
+      "Tool schemas do not expose default values that contain secrets"
+    ]
+  }
+}
