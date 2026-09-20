@@ -29,6 +29,7 @@ the rest are recorded here in a line or two so the reasoning is not lost.
 | [0020](adr/0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | 2026-09-01 | Accepted |
 | [0021](adr/0021-rename-to-xeb.md) | Rename the extension to `gh xeb` | 2026-09-01 | Accepted |
 | [0022](adr/0022-harness-install.md) | `harness install` generates the agent skill from the live command tree | 2026-09-01 | Accepted |
+| [0023](adr/0023-mcp-server-command.md) | `mcp` subcommand exposes the CLI as an MCP server via stdio | 2026-09-20 | Proposed |
 
 ## Smaller decisions, no ADR
 

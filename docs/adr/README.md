@@ -48,3 +48,4 @@ invisible in the code.
 | [0020](0020-backstage-create.md) | `backstage create` runs a template, and validates before it does | Accepted |
 | [0021](0021-rename-to-xeb.md) | Rename the extension to `gh xeb` | Accepted |
 | [0022](0022-harness-install.md) | `harness install` generates the agent skill from the live command tree | Accepted |
+| [0023](0023-mcp-server-command.md) | `mcp` subcommand exposes the CLI as an MCP server via stdio | Proposed |
