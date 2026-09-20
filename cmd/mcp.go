@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -128,73 +130,215 @@ parsing shell output.`,
 	}
 }
 
-// runMCPServer implements the MCP stdio protocol handler.
-// For now, this is a placeholder that discovers and lists tools.
-// A full implementation would integrate with an MCP library.
+// runMCPServer implements the MCP stdio protocol handler via JSON-RPC 2.0.
 func runMCPServer(ctx context.Context, stderr io.Writer) error {
-	// Build the command tree to discover tools
+	// Create root once for tool discovery
 	root := NewRootCmd(DefaultDeps())
 	tools := discoverTools(root, "")
 
-	// For now, output the tool list as JSON to stderr (real implementation
-	// would use proper MCP framing on stdout). This proves discovery works.
-	toolList := map[string]interface{}{
-		"tools": tools,
-		"count": len(tools),
+	// Server stores deps for creating fresh roots on each command execution
+	server := &mcpServer{
+		deps:  DefaultDeps(),
+		tools: tools,
+		log:   stderr,
 	}
+	return server.run(ctx)
+}
 
-	data, err := json.MarshalIndent(toolList, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling tools: %w", err)
+// mcpServer handles MCP protocol messages over stdin/stdout.
+type mcpServer struct {
+	deps  Deps
+	tools []MCPTool
+	log   io.Writer
+}
+
+// mcpRequest and mcpResponse represent JSON-RPC 2.0 protocol frames.
+type mcpRequest struct {
+	JSONRPC string                 `json:"jsonrpc"`
+	ID      interface{}            `json:"id"`
+	Method  string                 `json:"method"`
+	Params  map[string]interface{} `json:"params"`
+}
+
+type mcpResponse struct {
+	JSONRPC string      `json:"jsonrpc"`
+	ID      interface{} `json:"id,omitempty"`
+	Result  interface{} `json:"result,omitempty"`
+	Error   *mcpError   `json:"error,omitempty"`
+}
+
+type mcpError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// run starts the MCP server loop.
+func (s *mcpServer) run(ctx context.Context) error {
+	scanner := newJSONRPCReader(os.Stdin)
+	enc := json.NewEncoder(os.Stdout)
+
+	for {
+		req := &mcpRequest{}
+		if err := scanner.Scan(req); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("reading request: %w", err)
+		}
+
+		resp := s.handleRequest(ctx, req)
+		if err := enc.Encode(resp); err != nil {
+			fmt.Fprintf(s.log, "error encoding response: %v\n", err)
+		}
 	}
-
-	// Write to stderr for now (debugging)
-	fmt.Fprintf(stderr, "Discovered %d tools:\n%s\n", len(tools), string(data))
-
-	// TODO: Implement full MCP stdio protocol
-	// - Read tool requests from stdin
-	// - Execute requested tools with captured output
-	// - Return structured MCP responses on stdout
-	// - Handle errors and validation
 
 	return nil
 }
 
-// executeToolCommand runs a named tool and returns its output.
-// This will be used by the MCP protocol handler to execute tools.
-func executeToolCommand(ctx context.Context, root *cobra.Command, toolName string, args []string) (stdout, stderr string, err error) {
-	// Find the command in the tree by reconstructing from the tool name
-	parts := strings.Split(toolName, "_")
-	if len(parts) == 0 {
-		return "", "", fmt.Errorf("invalid tool name: %s", toolName)
+// handleRequest routes MCP method calls.
+func (s *mcpServer) handleRequest(ctx context.Context, req *mcpRequest) *mcpResponse {
+	resp := &mcpResponse{
+		JSONRPC: "2.0",
+		ID:      req.ID,
 	}
 
-	// Navigate the command tree
-	cmd := root
-	for _, part := range parts {
-		found := false
-		for _, subcmd := range cmd.Commands() {
-			if subcmd.Name() == part {
-				cmd = subcmd
-				found = true
-				break
+	switch req.Method {
+	case "initialize":
+		resp.Result = s.handleInitialize()
+	case "tools/list":
+		resp.Result = s.handleListTools()
+	case "tools/call":
+		result, err := s.handleCallTool(ctx, req.Params)
+		if err != nil {
+			resp.Error = &mcpError{Code: -32603, Message: err.Error()}
+		} else {
+			resp.Result = result
+		}
+	default:
+		resp.Error = &mcpError{Code: -32601, Message: "method not found"}
+	}
+
+	return resp
+}
+
+// handleInitialize returns server capabilities.
+func (s *mcpServer) handleInitialize() interface{} {
+	return map[string]interface{}{
+		"protocolVersion": "2024-11-05",
+		"capabilities": map[string]interface{}{
+			"tools": map[string]interface{}{},
+		},
+		"serverInfo": map[string]interface{}{
+			"name":    "gh-xeb",
+			"version": version,
+		},
+	}
+}
+
+// handleListTools returns the tool catalog.
+func (s *mcpServer) handleListTools() interface{} {
+	tools := make([]map[string]interface{}, len(s.tools))
+	for i, t := range s.tools {
+		tools[i] = map[string]interface{}{
+			"name":        t.Name,
+			"description": t.Description,
+			"inputSchema": t.InputSchema,
+		}
+	}
+	return map[string]interface{}{
+		"tools": tools,
+	}
+}
+
+// handleCallTool executes a tool and returns the output.
+func (s *mcpServer) handleCallTool(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	name, ok := params["name"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing 'name' parameter")
+	}
+
+	// Extract arguments from params (all other keys)
+	args := []string{}
+	for k, v := range params {
+		if k == "name" {
+			continue
+		}
+
+		// Handle different value types
+		switch val := v.(type) {
+		case string:
+			args = append(args, "--"+k, val)
+		case bool:
+			if val {
+				args = append(args, "--"+k)
+			}
+		case float64:
+			args = append(args, "--"+k, fmt.Sprintf("%v", val))
+		case []interface{}:
+			for _, item := range val {
+				args = append(args, "--"+k, fmt.Sprintf("%v", item))
 			}
 		}
-		if !found {
-			return "", "", fmt.Errorf("command not found: %s", toolName)
+	}
+
+	// Create a fresh root for this command execution
+	root := NewRootCmd(s.deps)
+	stdout, stderr, err := executeToolCommand(ctx, root, name, args)
+
+	result := map[string]interface{}{
+		"stdout": stdout,
+	}
+	if stderr != "" {
+		result["stderr"] = stderr
+	}
+	if err != nil {
+		result["error"] = err.Error()
+	}
+
+	return result, nil
+}
+
+// jsonRPCReader reads newline-delimited JSON from a reader.
+type jsonRPCReader struct {
+	r *bufio.Scanner
+}
+
+func newJSONRPCReader(r io.Reader) *jsonRPCReader {
+	return &jsonRPCReader{r: bufio.NewScanner(r)}
+}
+
+func (jr *jsonRPCReader) Scan(v interface{}) error {
+	if !jr.r.Scan() {
+		if err := jr.r.Err(); err != nil {
+			return err
+		}
+		return io.EOF
+	}
+	return json.Unmarshal(jr.r.Bytes(), v)
+}
+
+// executeToolCommand runs a named tool and returns its output.
+// Uses the same approach as tests: creates a root, sets buffers, executes.
+func executeToolCommand(ctx context.Context, root *cobra.Command, toolName string, args []string) (stdout, stderr string, err error) {
+	// Tool name is either a single command (doctor) or nested (vault_get).
+	// We need to pass the full command path as args to Execute.
+	parts := strings.Split(toolName, "_")
+
+	var outBuf, errBuf bytes.Buffer
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Build the full argument list: [subcommand, subsubcommand, ..., --flag, value, ...]
+	fullArgs := append(parts, args...)
+	root.SetArgs(fullArgs)
+
+	// Execute the command
+	if err := root.ExecuteContext(ctx); err != nil {
+		stderr = errBuf.String()
+		if stderr == "" {
+			stderr = err.Error()
 		}
 	}
 
-	// Capture output
-	var outBuf, errBuf bytes.Buffer
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&errBuf)
-
-	// Execute the command
-	cmd.SetArgs(args)
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		return outBuf.String(), errBuf.String(), err
-	}
-
-	return outBuf.String(), errBuf.String(), nil
+	return outBuf.String(), errBuf.String(), err
 }
