@@ -32,6 +32,25 @@ and [go-gh](https://github.com/cli/go-gh).
 - Never introduce a dependency without a clear need — this extension should stay
   installable as a single static binary (`CGO_ENABLED=0`).
 
+## MCP Server
+
+This repository exposes a Model Context Protocol (MCP) server via `gh xeb mcp`.
+Configure it in your AI client for automated tool discovery:
+
+```json
+{
+  "mcpServers": {
+    "gh-xeb": {
+      "command": "gh",
+      "args": ["xeb", "mcp"],
+      "disabled": false
+    }
+  }
+}
+```
+
+See [`.mcp/README.md`](../.mcp/README.md) for tool descriptions and setup.
+
 ## Verifying
 
 Run `make check`. That is exactly what `.github/workflows/ci.yml` runs.

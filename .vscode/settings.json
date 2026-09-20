@@ -5,6 +5,14 @@
   "github.copilot.chat.commitMessageGeneration.instructions": [
     { "text": "Use imperative mood and mention the affected subcommand or package." }
   ],
+  // MCP server for gh-xeb CLI tools
+  "mcpServers": {
+    "gh-xeb": {
+      "command": "gh",
+      "args": ["xeb", "mcp"],
+      "disabled": false
+    }
+  },
   "[go]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "golang.go"
