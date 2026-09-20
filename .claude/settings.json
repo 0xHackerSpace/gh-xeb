@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go doc:*)",
+      "Bash(go env:*)",
+      "Bash(go list:*)",
+      "Bash(go version:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go mod verify:*)",
+      "Bash(go mod download:*)",
+      "Bash(go tool cover:*)",
+      "Bash(gofmt:*)",
+      "Bash(make build:*)",
+      "Bash(make test:*)",
+      "Bash(make lint:*)",
+      "Bash(make check:*)",
+      "Bash(make cover:*)",
+      "Bash(make clean:*)",
+      "Bash(make help:*)",
+      "Bash(./script/build.sh:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh api:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh extension list:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(gh release create:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh extension install:*)",
+      "Bash(gh extension upgrade:*)",
+      "Bash(gh extension remove:*)",
+      "Bash(make install:*)"
+    ],
+    "deny": [
+      "Bash(go clean -modcache:*)"
+    ]
+  }
+}

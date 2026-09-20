@@ -1,0 +1,34 @@
+# Compiled extension binary (built at the repo root, named after the repo)
+/gh-xeb
+/gh-xeb.exe
+
+# Cross-compiled release artifacts
+/dist/
+
+# Go test/coverage output
+*.test
+coverage.out
+coverage.html
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Local, machine-specific agent settings
+.claude/settings.local.json
+
+# Environment variables
+.env
+
+# Agent skills written by `gh xeb harness install`. Generated from the command
+# tree, so committing them would put a file in version control that goes stale
+# in silence -- run the command instead.
+.claude/skills/
+.github/skills/
+
+.notes
+
+use-case/*

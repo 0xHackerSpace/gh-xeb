@@ -1,0 +1,29 @@
+name: Release
+
+# Publishing a tag builds the cross-platform binaries that `gh extension
+# install` downloads. Without this, users can only install from source.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build and attach precompiled binaries
+        uses: cli/gh-extension-precompile@v2
+        with:
+          go_version_file: go.mod
+          build_script_override: script/build.sh
