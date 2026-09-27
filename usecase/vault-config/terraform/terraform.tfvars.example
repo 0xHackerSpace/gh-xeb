@@ -1,0 +1,22 @@
+# Vault Configuration
+vault_addr  = "https://vault.example.com:8200"
+vault_token = "s.xxxxxxxxxxxxxxxxxxxxxx" # Use environment variable instead: export TF_VAR_vault_token=...
+
+# GitHub Configuration
+github_organization = "0xHackerSpace"
+github_token        = "ghp_xxxxxxxxxxxxxxxxxxxxxx" # Use environment variable instead: export TF_VAR_github_token=...
+github_base_url     = "https://github.com"
+
+# KV Secrets Mount Path
+kv_mount_path = "kv"
+
+# GitHub Users to Vault Policies Mapping
+github_users_mapping = {
+  "ianoliv"     = ["default", "admin"]
+  "contributor" = ["default"]
+}
+
+# Custom Vault Policies (optional)
+vault_policies = {
+  # "custom-policy" = "path \"kv/data/custom/*\" { capabilities = [\"read\", \"list\"] }"
+}
